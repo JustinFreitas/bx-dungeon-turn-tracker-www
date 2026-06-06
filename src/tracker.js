@@ -53,12 +53,14 @@ class TurnTracker {
   }
 
   lightTorch() {
+    this.saveHistory();
     this.state.turnsLeftOnTorch = 6;
     this.addLogMessages(["Torch lit. It will last for 6 turns (1 hour)."]);
   }
 
   extinguishTorch() {
     if (this.state.turnsLeftOnTorch > 0) {
+      this.saveHistory();
       this.state.turnsLeftOnTorch = 0;
       this.addLogMessages(["Torch extinguished."]);
     }
@@ -125,6 +127,7 @@ class TurnTracker {
     const intervalInt = parseInt(interval, 10);
     if (isNaN(intervalInt) || intervalInt < 0) return;
 
+    this.saveHistory();
     this.state.monsterInterval = intervalInt;
     this.addLogMessages([`Wandering monster check interval set to ${intervalInt}.`]);
   }

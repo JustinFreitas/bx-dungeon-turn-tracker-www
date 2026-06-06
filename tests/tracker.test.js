@@ -92,28 +92,28 @@ describe('TurnTracker', () => {
     tracker.nextTurn(); // Turn 2
     expect(tracker.getStatus().currentTurn).toBe(2);
 
-    tracker.undo();
+    tracker.undo(); // Back to T1 (after torch lit)
     expect(tracker.getStatus().currentTurn).toBe(1);
+    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
 
-    tracker.redo();
+    tracker.redo(); // Back to T2
     expect(tracker.getStatus().currentTurn).toBe(2);
   });
 
-  test('intra-turn actions do not create undo checkpoints', () => {
-    // T1 start
-    tracker.lightTorch(); // T1 modified
-    // History should still be empty (because constructor didn't save, and lightTorch didn't save)
-    expect(tracker.getStatus().canUndo).toBe(false);
-
-    tracker.nextTurn(); // Save T1. State T2.
-    expect(tracker.getStatus().canUndo).toBe(true);
-
-    tracker.setMonsterInterval(10); // T2 modified. No save.
-    
-    // Undo should go back to T1 (skipping T2-Interval-Change undo)
+  test('undo/redo works for settings and actions', () => {
+    // Torch undo
+    tracker.lightTorch();
+    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
     tracker.undo();
-    expect(tracker.getStatus().currentTurn).toBe(1);
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6); // T1 had torch
+    expect(tracker.getStatus().turnsLeftOnTorch).toBe(0);
+    tracker.redo();
+    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
+
+    // Interval undo
+    tracker.setMonsterInterval(10);
+    expect(tracker.getStatus().monsterInterval).toBe(10);
+    tracker.undo();
+    expect(tracker.getStatus().monsterInterval).toBe(2);
   });
 
   test('resting advances turn and resets counters', () => {
