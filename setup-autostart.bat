@@ -12,7 +12,10 @@ if %ERRORLEVEL% NEQ 0 (
 echo [INFO] Installing project dependencies...
 call npm install --silent
 
-echo [INFO] Starting OSR Dungeon Turn Tracker with PM2...
+echo [INFO] Cleaning up old PM2 process if it exists...
+call pm2 delete osr-tracker >nul 2>&1
+
+echo [INFO] Starting B/X Dungeon Turn Tracker with PM2...
 :: Use the ecosystem file to ensure all environment variables and limits are applied
 call pm2 start ecosystem.config.js
 
@@ -22,14 +25,14 @@ call pm2 save
 
 echo.
 echo ============================================================
-echo  SUCCESS: The tracker is now running in PM2.
+echo  SUCCESS: The tracker is now running as 'bx-dungeon-turn'.
 echo  It will automatically start when the system reboots.
 echo ============================================================
 echo.
 echo Useful Commands:
 echo  - View Status: pm2 status
-echo  - View Logs:   pm2 logs osr-tracker
-echo  - Stop App:    pm2 stop osr-tracker
+echo  - View Logs:   pm2 logs bx-dungeon-turn
+echo  - Stop App:    pm2 stop bx-dungeon-turn
 echo.
 
 pause

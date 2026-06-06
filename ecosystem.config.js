@@ -1,10 +1,10 @@
 module.exports = {
   apps: [{
-    name: "osr-tracker",
+    name: "bx-dungeon-turn",
     script: "./index.js",
     instances: 1,
     autorestart: true,
-    watch: false, // PM2 watch can conflict with Node --watch; better to leave false in prod
+    watch: false,
     max_memory_restart: "200M",
     env: {
       NODE_ENV: "production",
