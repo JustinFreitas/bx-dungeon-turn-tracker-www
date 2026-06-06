@@ -1,0 +1,21 @@
+{
+  "name": "tracker",
+  "version": "1.0.0",
+  "description": "B/X D&D Dungeon Turn Tracker",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
+  }
+}

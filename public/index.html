@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B/X D&D Turn Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .status-card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .log-box { height: 500px; overflow-y: auto; border: 1px solid #dee2e6; background-color: white; padding: 15px; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+        .monster-alert { color: #dc3545; font-weight: bold; background-color: #fff5f5; padding: 2px 5px; border-radius: 3px; }
+        .torch-alert { color: #fd7e14; }
+        .rest-alert { color: #198754; }
+        .turn-header { font-weight: bold; border-bottom: 1px solid #eee; margin-top: 10px; color: #6c757d; display: flex; justify-content: space-between; }
+        .penalty-alert { color: #6f42c1; font-weight: bold; }
+        .warning-alert { color: #856404; background-color: #fff3cd; padding: 2px 5px; border-radius: 3px; }
+        .config-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6; }
+        .note-text { font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">B/X D&D Turn Tracker</h1>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card status-card">
+                    <div class="card-header bg-dark text-white">Current Status</div>
+                    <div class="card-body">
+                        <p><strong>Turn:</strong> <span id="currentTurn" class="fs-4">1</span></p>
+                        <p><strong>Torch:</strong> <span id="torchStatus">Extinguished</span></p>
+                        <p><strong>Turns since rest:</strong> <span id="turnsSinceRest">0</span> / 5</p>
+                        <p><strong>Roll Penalty:</strong> <span id="penalty" class="badge bg-secondary">0</span></p>
+                        <p><strong>Monster Check:</strong> Every <span id="monsterIntervalDisplay">2</span> turns</p>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="turnNotes" class="form-label">Turn Notes:</label>
+                    <textarea class="form-control" id="turnNotes" rows="2" placeholder="Enter notes for this turn..."></textarea>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary btn-lg" onclick="handleTurnAction('next')">Next Turn (Move/Search)</button>
+                    <button class="btn btn-success" onclick="handleTurnAction('rest')">Rest (1 Turn)</button>
+                    <div class="row g-2">
+                        <div class="col">
+                            <button class="btn btn-warning w-100" onclick="handleAction('torch')">Light Torch</button>
+                        </div>
+                        <div class="col">
+                            <button id="extinguishBtn" class="btn btn-outline-warning w-100" onclick="handleAction('extinguish')" disabled>Extinguish</button>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col">
+                            <button id="undoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('undo')" disabled>Undo</button>
+                        </div>
+                        <div class="col">
+                            <button id="redoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('redo')" disabled>Redo</button>
+                        </div>
+                    </div>
+                    
+                    <div class="config-section">
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text">Monster Interval:</span>
+                            <input type="number" id="intervalInput" class="form-control" placeholder="Turns (0=off)">
+                            <button class="btn btn-outline-primary" type="button" onclick="handleSetInterval()">Set</button>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <button class="btn btn-outline-danger btn-sm" onclick="handleReset()">Reset Tracker</button>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <h3>Adventure Log</h3>
+                <div id="log" class="log-box">
+                    <!-- Log entries will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatTime(turn) {
+            const minutesTotal = (turn - 1) * 10;
+            const hours = Math.floor(minutesTotal / 60);
+            const minutes = minutesTotal % 60;
+            
+            let timeStr = "";
+            if (hours > 0) {
+                timeStr += hours + "hr ";
+            }
+            timeStr += minutes + "min completed";
+            return timeStr;
+        }
+
+        function renderStatus(status) {
+            document.getElementById('currentTurn').innerText = status.currentTurn;
+            document.getElementById('torchStatus').innerText = status.turnsLeftOnTorch > 0 
+                ? status.turnsLeftOnTorch + ' turns remaining' 
+                : 'Extinguished';
+            document.getElementById('turnsSinceRest').innerText = status.turnsSinceRest;
+            document.getElementById('monsterIntervalDisplay').innerText = status.monsterInterval === 0 ? '0 (Off)' : status.monsterInterval;
+            
+            const penaltyBadge = document.getElementById('penalty');
+            penaltyBadge.innerText = status.penalty;
+            penaltyBadge.className = status.penalty < 0 ? 'badge bg-danger' : 'badge bg-secondary';
+
+            document.getElementById('undoBtn').disabled = !status.canUndo;
+            document.getElementById('redoBtn').disabled = !status.canRedo;
+            document.getElementById('extinguishBtn').disabled = status.turnsLeftOnTorch <= 0;
+
+            renderLog(status.fullLog);
+        }
+
+        function renderLog(fullLog) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML = ''; // Clear and re-render the whole log
+            
+            fullLog.forEach(entry => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'mb-2';
+                
+                let html = `<div class="turn-header">
+                    <span>Turn ${entry.turn}</span>
+                    <span>${formatTime(entry.turn)}</span>
+                </div>`;
+                
+                entry.messages.forEach(msg => {
+                    let cssClass = '';
+                    if (msg.includes('ENCOUNTER!')) cssClass = 'monster-alert';
+                    else if (msg.includes('torch')) cssClass = 'torch-alert';
+                    else if (msg.includes('rested')) cssClass = 'rest-alert';
+                    else if (msg.includes('exhausted')) cssClass = 'penalty-alert';
+                    else if (msg.includes('WARNING')) cssClass = 'warning-alert';
+                    else if (msg.startsWith('Note:')) cssClass = 'note-text';
+                    
+                    html += `<div class="${cssClass}">- ${msg}</div>`;
+                });
+                
+                entryDiv.innerHTML = html;
+                logDiv.appendChild(entryDiv);
+            });
+            
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function handleAction(type, value) {
+            const response = await fetch('/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: type, value: value })
+            });
+            const data = await response.json();
+            
+            if (type === 'reset') {
+                document.getElementById('log').innerHTML = '<div class="text-muted">Tracker reset...</div>';
+            }
+            
+            renderStatus(data.status);
+        }
+
+        async function handleTurnAction(type) {
+            const notesInput = document.getElementById('turnNotes');
+            const notes = notesInput.value.trim();
+            
+            await handleAction(type, notes);
+            
+            // Clear notes after successful action
+            notesInput.value = '';
+        }
+
+        function handleSetInterval() {
+            const val = document.getElementById('intervalInput').value;
+            if (val !== '' && !isNaN(val)) {
+                handleAction('setInterval', parseInt(val, 10));
+                document.getElementById('intervalInput').value = '';
+            }
+        }
+
+        function handleReset() {
+            if (confirm('Are you sure you want to reset the Turn Tracker? All history will be lost.')) {
+                handleAction('reset');
+            }
+        }
+
+        // Initial load
+        async function init() {
+            const response = await fetch('/status');
+            const status = await response.json();
+            renderStatus(status);
+        }
+        init();
+    </script>
+</body>
+</html>
