@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B/X D&D Turn Tracker</title>
+    <title>B/X D&D Dungeon Turn Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { padding: 20px; background-color: var(--bs-body-bg); color: var(--bs-body-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: background-color 0.3s, color 0.3s; }
-        .status-card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .log-box { height: 500px; overflow-y: auto; border: 1px solid var(--bs-border-color); background-color: var(--bs-tertiary-bg); padding: 15px; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+        .status-card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .log-box { height: 650px; overflow-y: auto; border: 1px solid var(--bs-border-color); background-color: var(--bs-tertiary-bg); padding: 15px; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
         
-        /* Dark mode specific overrides for log box text colors if needed */
         [data-bs-theme="dark"] .log-box { background-color: #1e1e1e; }
         
+        /* Visibility Alerts */
+        .visibility-warning { background-color: rgba(220, 53, 69, 0.15); border: 1px solid #dc3545; }
+        
         .monster-alert { color: #dc3545; font-weight: bold; background-color: rgba(220, 53, 69, 0.1); padding: 2px 5px; border-radius: 3px; }
+        .monster-none { color: var(--bs-secondary-color); font-style: italic; }
         .torch-alert { color: #fd7e14; }
         .rest-alert { color: #198754; }
         .turn-header { font-weight: bold; border-bottom: 1px solid var(--bs-border-color); margin-top: 10px; color: var(--bs-secondary-color); display: flex; justify-content: space-between; }
@@ -25,85 +28,268 @@
         .note-text { font-style: italic; color: var(--bs-secondary-color); }
         
         .theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+        .save-list { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+        
+        /* Setup Overlay */
+        #setupOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1040; display: flex; align-items: center; justify-content: center; }
+        .setup-card { width: 100%; max-width: 600px; padding: 0; border: none; }
+        
+        .light-item { font-size: 0.85rem; border-bottom: 1px solid var(--bs-border-color); padding: 5px 0; }
+        .light-item:last-child { border-bottom: none; }
+
+        .btn-xs { padding: 1px 5px; font-size: 0.75rem; line-height: 1.5; border-radius: 3px; }
     </style>
 </head>
 <body>
+    <!-- Setup Overlay -->
+    <div id="setupOverlay">
+        <div class="card setup-card shadow-lg" data-bs-theme="dark">
+            <div class="card-header bg-primary text-white py-3">
+                <h4 class="mb-0 text-center">Dungeon Setup</h4>
+            </div>
+            <div class="card-body p-4">
+                <form id="setupForm" onsubmit="event.preventDefault(); handleStartAdventure();">
+                    <div class="row">
+                        <div class="col-md-6 border-end">
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Wandering Monster Interval</label>
+                                <div class="input-group">
+                                    <input type="number" id="setupIntervalInput" class="form-control" value="2" min="0">
+                                    <span class="input-group-text">Turns</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Starting Movement Rate</label>
+                                <select id="setupMovementInput" class="form-select">
+                                    <option value="Unset">Unset</option>
+                                    <option value="120/40">120' / 40'</option>
+                                    <option value="90/30">90' / 30'</option>
+                                    <option value="60/20">60' / 20'</option>
+                                    <option value="30/10">30' / 10'</option>
+                                    <option value="0/0">0/0</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4 border-bottom pb-3">
+                                <label class="form-label fw-bold">Admin Key (For Saves)</label>
+                                <input type="password" id="setupAdminKeyInput" name="dungeon_master_key" class="form-control form-control-sm" autocomplete="current-password" placeholder="Required for loads">
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-info">Load Existing Game</label>
+                                <div id="setupSaveList" class="list-group list-group-flush save-list border rounded"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Starting Environment</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="setupAmbientSwitch">
+                                    <label class="form-check-label" for="setupAmbientSwitch" id="setupAmbientLabel">Dungeon is Dark</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Starting Light Sources</label>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" id="setupLightLabel" class="form-control" placeholder="Holder Name..." style="flex: 2;" autocomplete="off">
+                                    <select id="setupLightType" class="form-select" style="flex: 1; max-width: 100px;">
+                                        <option value="torch">Torch</option>
+                                        <option value="lantern">Lantern</option>
+                                    </select>
+                                    <button class="btn btn-outline-success" type="button" onclick="addSetupLight()">Add</button>
+                                </div>
+                                <div id="setupLightsList" class="list-group list-group-flush border rounded overflow-auto" style="max-height: 150px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid mt-3">
+                        <button type="submit" id="startAdventureBtn" class="btn btn-success btn-lg py-2 fw-bold">
+                            START ADVENTURE
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Peek Modal -->
+    <div class="modal fade" id="logPeekModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Log History: <span id="peekSaveName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="peekLogContainer" class="p-3 bg-tertiary-bg border rounded" style="font-family: monospace; white-space: pre-wrap; font-size: 0.9rem;">
+                        <!-- Peeking log entries go here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="theme-toggle">
         <button id="themeBtn" class="btn btn-outline-secondary" onclick="toggleTheme()">
             <span id="themeIcon">🌙</span> Dark Mode
         </button>
     </div>
 
-    <div class="container">
-        <h1 class="text-center mb-4">B/X D&D Turn Tracker</h1>
+    <div class="container-fluid px-4" id="mainApp" style="display:none;">
+        <h1 class="text-center mb-4">B/X D&D Dungeon Turn Tracker</h1>
         
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card status-card">
-                    <div class="card-header bg-dark text-white">Current Status</div>
+        <div class="row g-4">
+            <div class="col-lg-3">
+                <div class="card status-card" id="statusCard">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        Current Status
+                        <div id="visibilityBadge"></div>
+                    </div>
                     <div class="card-body">
                         <p><strong>Turn:</strong> <span id="currentTurn" class="fs-4">1</span></p>
-                        <p><strong>Torch:</strong> <span id="torchStatus">Extinguished</span></p>
-                        <p><strong>Turns since rest:</strong> <span id="turnsSinceRest">0</span> / 5</p>
+                        <p>
+                            <strong>Room Light:</strong> 
+                            <button class="btn btn-sm" id="ambientToggleBtn" onclick="handleAction('toggleAmbient')">
+                                <span id="ambientIcon"></span> <span id="ambientText"></span>
+                            </button>
+                        </p>
+                        <div class="border-top pt-2">
+                            <strong>Active Light Sources:</strong>
+                            <div class="small text-muted mb-1 italic" style="font-size: 0.75rem;">(Turns remaining after this one)</div>
+                            <div id="activeLightsList" class="mt-1"></div>
+                        </div>
+                        <p class="mt-2 border-top pt-2">
+                            <strong>Movement Rate:</strong>
+                            <select id="movementRateInput" class="form-select form-select-sm d-inline-block w-auto" onchange="handleAction('setMovementRate', this.value)">
+                                <option value="Unset">Unset</option>
+                                <option value="120/40">120/40</option>
+                                <option value="90/30">90/30</option>
+                                <option value="60/20">60/20</option>
+                                <option value="30/10">30/10</option>
+                                <option value="0/0">0/0</option>
+                            </select>
+                        </p>
+                        <p class="border-top pt-2"><strong>Turns since rest:</strong> <span id="turnsSinceRest">0</span> / 5</p>
                         <p><strong>Roll Penalty:</strong> <span id="penalty" class="badge bg-secondary">0</span></p>
                         <p><strong>Monster Check:</strong> Every <span id="monsterIntervalDisplay">2</span> turns</p>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label for="turnNotes" class="form-label">Turn Notes:</label>
-                    <textarea class="form-control" id="turnNotes" rows="2" placeholder="Enter notes for this turn..."></textarea>
+                    <label for="turnNotes" class="form-label small fw-bold">Turn Notes:</label>
+                    <textarea class="form-control" id="turnNotes" rows="2" placeholder="Notes for this turn..."></textarea>
                 </div>
 
                 <div class="d-grid gap-2">
                     <button class="btn btn-primary btn-lg" onclick="handleTurnAction('next')">Next Turn (Move/Search)</button>
                     <button class="btn btn-success" onclick="handleTurnAction('rest')">Rest (1 Turn)</button>
+                    <div class="config-section mt-1 pt-1 border-0">
+                        <label class="form-label small fw-bold mb-1">Light New Source</label>
+                        <div class="input-group input-group-sm mb-1">
+                            <input type="text" id="lightHolderName" class="form-control" placeholder="Character Name..." autocomplete="off">
+                        </div>
+                        <div class="row g-2">
+                            <div class="col">
+                                <button class="btn btn-warning w-100" onclick="handleLightAction('torch')">Torch</button>
+                            </div>
+                            <div class="col">
+                                <button class="btn btn-info w-100" onclick="handleLightAction('lantern')">Lantern</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-danger btn-sm mt-1" onclick="handleAction('rollMonster')">Roll Wandering Monster Now</button>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <h3 class="d-flex justify-content-between align-items-center">Adventure Log</h3>
+                <div id="log" class="log-box"></div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="d-grid gap-2">
                     <div class="row g-2">
-                        <div class="col">
-                            <button class="btn btn-warning w-100" onclick="handleAction('torch')">Light Torch</button>
-                        </div>
-                        <div class="col">
-                            <button id="extinguishBtn" class="btn btn-outline-warning w-100" onclick="handleAction('extinguish')" disabled>Extinguish</button>
-                        </div>
+                        <div class="col"><button id="undoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('undo')" disabled>Undo</button></div>
+                        <div class="col"><button id="redoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('redo')" disabled>Redo</button></div>
                     </div>
-                    <div class="row g-2">
-                        <div class="col">
-                            <button id="undoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('undo')" disabled>Undo</button>
+
+                    <form id="adminForm" onsubmit="event.preventDefault();">
+                        <div class="config-section">
+                            <h6>Security</h6>
+                            <input type="password" id="adminKeyInput" name="app_admin_key" class="form-control form-control-sm" autocomplete="current-password" placeholder="Admin Key">
                         </div>
-                        <div class="col">
-                            <button id="redoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('redo')" disabled>Redo</button>
+                    </form>
+
+                    <form id="saveForm" onsubmit="event.preventDefault(); handleSave();">
+                        <div class="config-section">
+                            <h6>Save / Restore</h6>
+                            <div class="input-group input-group-sm mb-2">
+                                <input type="text" id="saveNameInput" class="form-control" placeholder="Name" autocomplete="off">
+                                <button type="submit" class="btn btn-outline-success">Save</button>
+                            </div>
+                            <div id="saveList" class="list-group list-group-flush save-list border rounded"></div>
                         </div>
-                    </div>
-                    
-                    <div class="config-section">
-                        <div class="input-group input-group-sm mb-2">
-                            <span class="input-group-text">Monster Interval:</span>
-                            <input type="number" id="intervalInput" class="form-control" placeholder="Turns (0=off)">
-                            <button class="btn btn-outline-primary" type="button" onclick="handleSetInterval()">Set</button>
-                        </div>
-                    </div>
+                    </form>
 
                     <hr>
                     <button class="btn btn-outline-danger btn-sm" onclick="handleReset()">Reset Tracker</button>
                 </div>
             </div>
-
-            <div class="col-md-8">
-                <h3>Adventure Log</h3>
-                <div id="log" class="log-box">
-                    <!-- Log entries will be rendered here -->
-                </div>
-            </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Theme Management
+        let setupLights = [];
+        const logPeekModal = new bootstrap.Modal(document.getElementById('logPeekModal'));
+
+        function addSetupLight() {
+            const labelInput = document.getElementById('setupLightLabel');
+            const typeSelect = document.getElementById('setupLightType');
+            const label = labelInput.value.trim() || "Party";
+            const type = typeSelect.value;
+            setupLights.push({ label, type });
+            labelInput.value = '';
+            renderSetupLights();
+        }
+
+        function removeSetupLight(index) {
+            setupLights.splice(index, 1);
+            renderSetupLights();
+        }
+
+        function renderSetupLights() {
+            const list = document.getElementById('setupLightsList');
+            if (!list) return;
+            list.innerHTML = '';
+            if (setupLights.length === 0) {
+                list.innerHTML = '<div class="list-group-item text-muted small text-center italic py-2">No starting lights.</div>';
+                return;
+            }
+            setupLights.forEach((l, i) => {
+                const item = document.createElement('div');
+                item.className = 'list-group-item d-flex justify-content-between align-items-center small py-1';
+                // Show 5 or 23 in setup preview to indicate "beyond current"
+                const count = l.type === 'lantern' ? 23 : 5;
+                item.innerHTML = `<span><strong>${l.label}</strong>: ${l.type} (+${count} future turns)</span> 
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1 border-0" onclick="removeSetupLight(${i})">&times;</button>`;
+                list.appendChild(item);
+            });
+        }
+
         function setTheme(theme) {
             document.documentElement.setAttribute('data-bs-theme', theme);
             localStorage.setItem('theme', theme);
             const btn = document.getElementById('themeBtn');
             const icon = document.getElementById('themeIcon');
+            if (!btn || !icon) return;
             if (theme === 'dark') {
                 icon.innerText = '☀️';
                 btn.innerHTML = '<span id="themeIcon">☀️</span> Light Mode';
@@ -120,118 +306,237 @@
             setTheme(currentTheme === 'dark' ? 'light' : 'dark');
         }
 
-        // Initialize theme
         const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         setTheme(savedTheme);
+
+        document.getElementById('setupAmbientSwitch').addEventListener('change', function() {
+            document.getElementById('setupAmbientLabel').innerText = this.checked ? 'Dungeon is Lit' : 'Dungeon is Dark';
+        });
 
         function formatTime(turn) {
             const minutesTotal = (turn - 1) * 10;
             const hours = Math.floor(minutesTotal / 60);
             const minutes = minutesTotal % 60;
-            
             let timeStr = "";
-            if (hours > 0) {
-                timeStr += hours + "hr ";
-            }
+            if (hours > 0) timeStr += hours + "hr ";
             timeStr += minutes + "min completed";
             return timeStr;
         }
 
         function renderStatus(status) {
+            const setupOverlay = document.getElementById('setupOverlay');
+            const mainApp = document.getElementById('mainApp');
+
+            if (status.started) {
+                setupOverlay.style.display = 'none';
+                mainApp.style.display = 'block';
+                loadSaveList('saveList');
+            } else {
+                setupOverlay.style.display = 'flex';
+                mainApp.style.display = 'none';
+                loadSaveList('setupSaveList');
+                renderSetupLights();
+            }
+
             document.getElementById('currentTurn').innerText = status.currentTurn;
-            document.getElementById('torchStatus').innerText = status.turnsLeftOnTorch > 0 
-                ? status.turnsLeftOnTorch + ' turns remaining' 
-                : 'Extinguished';
             document.getElementById('turnsSinceRest').innerText = status.turnsSinceRest;
             document.getElementById('monsterIntervalDisplay').innerText = status.monsterInterval === 0 ? '0 (Off)' : status.monsterInterval;
+            document.getElementById('movementRateInput').value = status.movementRate || 'Unset';
             
             const penaltyBadge = document.getElementById('penalty');
             penaltyBadge.innerText = status.penalty;
             penaltyBadge.className = status.penalty < 0 ? 'badge bg-danger' : 'badge bg-secondary';
 
+            const lightsList = document.getElementById('activeLightsList');
+            lightsList.innerHTML = '';
+            if (status.activeLights.length === 0) {
+                lightsList.innerHTML = '<span class="text-muted small italic">All extinguished</span>';
+            } else {
+                status.activeLights.forEach(l => {
+                    const div = document.createElement('div');
+                    div.className = 'light-item d-flex justify-content-between align-items-center';
+                    // User want "turns beyond current" label
+                    div.innerHTML = `<span><strong>${l.label}</strong>: +${l.turnsRemaining} turns</span>
+                        <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('extinguish', '${l.id}')">&times;</button>`;
+                    lightsList.appendChild(div);
+                });
+            }
+
+            const ambientBtn = document.getElementById('ambientToggleBtn');
+            const ambientIcon = document.getElementById('ambientIcon');
+            const ambientText = document.getElementById('ambientText');
+            const statusCard = document.getElementById('statusCard');
+            const visibilityBadge = document.getElementById('visibilityBadge');
+
+            if (status.ambientLight === 'lit') {
+                ambientBtn.className = 'btn btn-sm btn-outline-warning';
+                ambientIcon.innerText = '☀️';
+                ambientText.innerText = 'Room is Lit';
+                statusCard.classList.remove('visibility-warning');
+                visibilityBadge.innerHTML = '';
+            } else {
+                ambientBtn.className = 'btn btn-sm btn-outline-secondary';
+                ambientIcon.innerText = '🌙';
+                ambientText.innerText = 'Room is Dark';
+                if (status.activeLights.length === 0) {
+                    statusCard.classList.add('visibility-warning');
+                    visibilityBadge.innerHTML = '<span class="badge bg-danger">NO VISIBILITY</span>';
+                } else {
+                    statusCard.classList.remove('visibility-warning');
+                    visibilityBadge.innerHTML = '<span class="badge bg-warning text-dark">LIGHT ACTIVE</span>';
+                }
+            }
             document.getElementById('undoBtn').disabled = !status.canUndo;
             document.getElementById('redoBtn').disabled = !status.canRedo;
-            document.getElementById('extinguishBtn').disabled = status.turnsLeftOnTorch <= 0;
-
             renderLog(status.fullLog);
         }
 
         function renderLog(fullLog) {
             const logDiv = document.getElementById('log');
-            logDiv.innerHTML = ''; // Clear and re-render the whole log
-            
+            if (!logDiv) return;
+            logDiv.innerHTML = ''; 
             fullLog.forEach(entry => {
                 const entryDiv = document.createElement('div');
                 entryDiv.className = 'mb-2';
-                
-                let html = `<div class="turn-header">
-                    <span>Turn ${entry.turn}</span>
-                    <span> - ${formatTime(entry.turn)}</span>
-                </div>`;
-                
+                let html = `<div class="turn-header"><span>Turn ${entry.turn}</span><span> - ${formatTime(entry.turn)}</span></div>`;
                 entry.messages.forEach(msg => {
                     let cssClass = '';
                     if (msg.includes('ENCOUNTER!')) cssClass = 'monster-alert';
-                    else if (msg.includes('torch')) cssClass = 'torch-alert';
+                    else if (msg.includes('No encounter')) cssClass = 'monster-none';
+                    else if (msg.includes('lit') || msg.includes('refreshed') || msg.includes('lantern') || msg.includes('torch')) cssClass = 'torch-alert';
                     else if (msg.includes('rested')) cssClass = 'rest-alert';
                     else if (msg.includes('exhausted')) cssClass = 'penalty-alert';
                     else if (msg.includes('WARNING')) cssClass = 'warning-alert';
                     else if (msg.startsWith('Note:')) cssClass = 'note-text';
-                    
+                    else if (msg.includes('ambient light') || msg.includes('lightless area')) cssClass = 'text-info fw-bold';
                     html += `<div class="${cssClass}">- ${msg}</div>`;
                 });
-                
                 entryDiv.innerHTML = html;
                 logDiv.appendChild(entryDiv);
             });
-            
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        async function handleAction(type, value) {
-            const response = await fetch('/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: type, value: value })
-            });
-            const data = await response.json();
-            
-            if (type === 'reset') {
-                document.getElementById('log').innerHTML = '<div class="text-muted">Tracker reset...</div>';
-            }
-            
-            renderStatus(data.status);
+        async function handleAction(type, value, label = null, initialLights = null, ambientLight = null, movementRate = null) {
+            try {
+                const response = await fetch('/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: type, value: value, label: label, initialLights: initialLights, ambientLight: ambientLight, movementRate: movementRate })
+                });
+                const data = await response.json();
+                if (data.error) { alert(data.error); return; }
+                if (type === 'reset') document.getElementById('log').innerHTML = '';
+                renderStatus(data.status);
+            } catch (err) { alert("Communication error."); }
+        }
+
+        async function handleLightAction(type) {
+            const holder = document.getElementById('lightHolderName').value.trim() || "Party";
+            await handleAction('lightSource', type, holder);
+            document.getElementById('lightHolderName').value = '';
+        }
+
+        async function handleStartAdventure() {
+            const btn = document.getElementById('startAdventureBtn');
+            btn.disabled = true; btn.innerText = "ENTERING...";
+            const interval = document.getElementById('setupIntervalInput').value;
+            const ambientLight = document.getElementById('setupAmbientSwitch').checked ? 'lit' : 'dark';
+            const movementRate = document.getElementById('setupMovementInput').value;
+            await handleAction('start', interval, null, setupLights, ambientLight, movementRate);
+            btn.disabled = false; btn.innerText = "START ADVENTURE";
         }
 
         async function handleTurnAction(type) {
             const notesInput = document.getElementById('turnNotes');
             const notes = notesInput.value.trim();
-            
             await handleAction(type, notes);
-            
-            // Clear notes after successful action
             notesInput.value = '';
         }
 
-        function handleSetInterval() {
-            const val = document.getElementById('intervalInput').value;
-            if (val !== '' && !isNaN(val)) {
-                handleAction('setInterval', parseInt(val, 10));
-                document.getElementById('intervalInput').value = '';
-            }
+        function handleReset() { if (confirm('Reset tracker?')) handleAction('reset'); }
+
+        async function loadSaveList(targetId) {
+            const listDiv = document.getElementById(targetId);
+            if (!listDiv) return;
+            try {
+                const response = await fetch('/saves');
+                const names = await response.json();
+                listDiv.innerHTML = '';
+                if (names.length === 0) { listDiv.innerHTML = '<div class="list-group-item text-muted small text-center italic py-2">No saves found.</div>'; return; }
+                names.forEach(name => {
+                    const btnGrp = document.createElement('div');
+                    btnGrp.className = 'list-group-item d-flex justify-content-between align-items-center small py-1';
+                    btnGrp.innerHTML = `<span class="text-truncate" style="max-width: 150px;">${name}</span> 
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-outline-info btn-xs" onclick="handlePeek('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">Log</button>
+                            <button class="btn btn-outline-primary btn-xs" onclick="handleLoad('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">Load</button>
+                            <button class="btn btn-outline-danger btn-xs" onclick="handleDelete('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">&times;</button>
+                        </div>`;
+                    listDiv.appendChild(btnGrp);
+                });
+            } catch (err) {}
         }
 
-        function handleReset() {
-            if (confirm('Are you sure you want to reset the Turn Tracker? All history will be lost.')) {
-                handleAction('reset');
-            }
+        async function handlePeek(name, keyId) {
+            const key = document.getElementById(keyId).value.trim();
+            if (!key) { alert("Key required to peek log."); return; }
+            const response = await fetch('/peek', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, key })
+            });
+            const data = await response.json();
+            if (!response.ok) { alert(data.error); return; }
+            
+            document.getElementById('peekSaveName').innerText = name;
+            const container = document.getElementById('peekLogContainer');
+            container.innerHTML = '';
+            
+            data.data.state.fullLog.forEach(entry => {
+                let html = `<div class="fw-bold border-bottom mb-1 mt-2">Turn ${entry.turn}</div>`;
+                entry.messages.forEach(m => html += `<div>- ${m}</div>`);
+                container.innerHTML += html;
+            });
+            logPeekModal.show();
         }
 
-        // Initial load
+        async function handleDelete(name, keyId) {
+            const key = document.getElementById(keyId).value.trim();
+            if (!key) { alert("Key required to delete."); return; }
+            if (!confirm(`Delete save "${name}" permanently?`)) return;
+            const response = await fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, key })
+            });
+            if (response.ok) loadSaveList('setupSaveList'), loadSaveList('saveList');
+            else alert("Delete failed.");
+        }
+
+        async function handleSave() {
+            const name = document.getElementById('saveNameInput').value.trim();
+            const key = document.getElementById('adminKeyInput').value.trim();
+            if (!name || !key) { alert('Name and Key required.'); return; }
+            const response = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key }) });
+            if (response.ok) { document.getElementById('saveNameInput').value = ''; loadSaveList('saveList'); } else alert("Save failed.");
+        }
+
+        async function handleLoad(name, keyInputId) {
+            const key = document.getElementById(keyInputId).value.trim();
+            if (!key) { alert('Key required.'); return; }
+            if (!confirm(`Load "${name}"?`)) return;
+            const response = await fetch('/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key }) });
+            const data = await response.json();
+            if (response.ok) renderStatus(data.status); else alert(data.error);
+        }
+
         async function init() {
-            const response = await fetch('/status');
-            const status = await response.json();
-            renderStatus(status);
+            try {
+                const response = await fetch('/status');
+                const status = await response.json();
+                renderStatus(status);
+            } catch (err) { document.getElementById('setupOverlay').style.display = 'flex'; }
         }
         init();
     </script>

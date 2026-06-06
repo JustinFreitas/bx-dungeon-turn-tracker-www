@@ -1,10 +1,11 @@
 {
-  "name": "tracker",
+  "name": "osr-dungeon-turn-tracker-www",
   "version": "1.0.0",
   "description": "B/X D&D Dungeon Turn Tracker",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "node --watch index.js",
     "test": "jest"
   },
   "keywords": [],
@@ -13,7 +14,11 @@
   "type": "commonjs",
   "dependencies": {
     "body-parser": "^1.20.3",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.2.0",
+    "hpp": "^0.2.3",
+    "xss-clean": "^0.1.4"
   },
   "devDependencies": {
     "jest": "^30.2.0"

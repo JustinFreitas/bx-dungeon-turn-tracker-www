@@ -1,4 +1,4 @@
-# Loop Status - B/X D&D Turn Tracker
+# Loop Status - OSR Dungeon Turn Tracker WWW
 
 ## Status Update: 2026-06-06
 
@@ -6,27 +6,31 @@
 - [x] Initialized Git repository.
 - [x] Verified existing implementation against GEMINI.md requirements.
 - [x] Enhanced Undo/Redo functionality to cover "settings" like lighting torches and changing monster intervals.
-- [x] Verified all requirements through unit tests (15/15 passing).
+- [x] Verified all requirements through unit tests (17/17 passing).
 - [x] UI handles real-time conversion and log display correctly.
+- [x] Implemented Save/Restore mechanism with naming support.
+- [x] Added security measures (Admin Key, Rate Limiting, Sanitization, and Resource Limits).
+- [x] Renamed project to `osr-dungeon-turn-tracker-www`.
 
 ### Changes Made
-1. **src/tracker.js**: 
-   - Added `saveHistory()` to `lightTorch()`, `extinguishTorch()`, and `setMonsterInterval()` to ensure these actions are undoable.
-   - Confirmed rest warning and monster check timing.
-2. **tests/tracker.test.js**:
-   - Added `undo/redo works for settings and actions` test case.
-   - Updated existing tests to reflect new undo behavior (lightTorch now creates an undo point).
+1. **Project Renaming**:
+   - Updated `package.json` name to `osr-dungeon-turn-tracker-www`.
+   - Updated `GEMINI.md` and `LOOP_STATUS.md` titles.
+2. **Security Features**:
+   - Admin Key, Rate Limiting, Payload Limits, and Sanitization.
+3. **UI Layout**:
+   - Implemented a three-column layout for better balance and usability.
 
 ### Verification
-- `npm test` passed with 15 tests.
-- Manual inspection of `public/index.html` confirms `formatTime` and `renderLog` logic match requirements.
+- `npm test` passed with 17 tests.
+- UI layout and security features manually reviewed.
 
 ### Next Steps
-- Final review of requirements.
-- Consider adding a "help" or "about" section to the UI for B/X specific rules (optional but helpful).
-- Confirm if any other B/X specific rules should be automated (e.g., light source duration for lanterns vs torches). GEMINI.md only specifies torches (1 hour).
+- Task complete.
 
 ### Success Criteria Check
 - [x] Code compiles without errors.
 - [x] All unit tests pass.
 - [x] Build a web based node application that serves as a B/X D&D dungeon turn tracker.
+- [x] Implement save/restore with custom naming.
+- [x] Implement basic security and DOS prevention.

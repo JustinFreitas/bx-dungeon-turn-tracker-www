@@ -7,12 +7,21 @@ describe('TurnTracker', () => {
   beforeEach(() => {
     mockDie = jest.fn(() => 6); // Default roll, no monster (need 1)
     tracker = new TurnTracker(mockDie);
+    tracker.start({ interval: 2 }); // Standard B/X interval
   });
 
   test('initial state starts on Turn 1', () => {
     const status = tracker.getStatus();
     expect(status.currentTurn).toBe(1);
     expect(status.messages).toContain("Adventure begins!");
+  });
+
+  test('starting with a lit torch', () => {
+    const trackerWithTorch = new TurnTracker(mockDie);
+    trackerWithTorch.start({ interval: 2, startWithTorch: true });
+    const status = trackerWithTorch.getStatus();
+    expect(status.turnsLeftOnTorch).toBe(6);
+    expect(status.fullLog[0].messages).toContain("Torch lit. It will last for 6 turns (1 hour).");
   });
 
   test('lighting a torch', () => {
@@ -67,7 +76,9 @@ describe('TurnTracker', () => {
   });
 
   test('configurable wandering monster interval', () => {
-    tracker.setMonsterInterval(3);
+    // Reset tracker to set new interval at start
+    tracker = new TurnTracker(mockDie);
+    tracker.start({ interval: 3 });
     expect(tracker.getStatus().monsterInterval).toBe(3);
     
     mockDie.mockClear();
@@ -79,7 +90,8 @@ describe('TurnTracker', () => {
   });
 
   test('disabling wandering monster checks (interval 0)', () => {
-    tracker.setMonsterInterval(0);
+    tracker = new TurnTracker(mockDie);
+    tracker.start({ interval: 0 });
     mockDie.mockClear();
     tracker.nextTurn(); // Turn 2
     tracker.nextTurn(); // Turn 3
@@ -108,12 +120,6 @@ describe('TurnTracker', () => {
     expect(tracker.getStatus().turnsLeftOnTorch).toBe(0);
     tracker.redo();
     expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
-
-    // Interval undo
-    tracker.setMonsterInterval(10);
-    expect(tracker.getStatus().monsterInterval).toBe(10);
-    tracker.undo();
-    expect(tracker.getStatus().monsterInterval).toBe(2);
   });
 
   test('resting advances turn and resets counters', () => {
@@ -126,12 +132,10 @@ describe('TurnTracker', () => {
 
   test('log grouping for multiple actions in one turn', () => {
     tracker.lightTorch();
-    tracker.setMonsterInterval(4);
     const status = tracker.getStatus();
     const turn1Log = status.fullLog.find(e => e.turn === 1);
     expect(turn1Log.messages).toContain("Adventure begins!");
     expect(turn1Log.messages).toContain("Torch lit. It will last for 6 turns (1 hour).");
-    expect(turn1Log.messages).toContain("Wandering monster check interval set to 4.");
   });
 
   test('adding notes to next turn', () => {

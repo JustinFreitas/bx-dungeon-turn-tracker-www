@@ -1,25 +1,46 @@
+/**
+ * TurnTracker Class
+ * Manages the state, history, and rules for a B/X D&D Dungeon Turn Tracker.
+ */
 class TurnTracker {
   constructor(rollDie = () => Math.floor(Math.random() * 6) + 1) {
     this.history = [];
     this.redoStack = [];
     this.rollDie = rollDie;
-    
-    this.state = {
+    this.state = this.getInitialState();
+  }
+
+  /**
+   * Returns a fresh, unstarted state.
+   */
+  getInitialState() {
+    return {
+      started: false,
       currentTurn: 1,
       turnsSinceRest: 0,
-      turnsLeftOnTorch: 0,
+      activeLights: [], // Array of { id, label, type, turnsRemaining }
       penalty: 0,
       monsterInterval: 2,
-      messages: ["Adventure begins!"],
-      fullLog: [{ turn: 1, messages: ["Adventure begins!"] }]
+      movementRate: 'Unset', // '120/40', '90/30', '60/20', '30/10'
+      ambientLight: 'dark', // 'dark' or 'lit'
+      messages: [],
+      fullLog: [] 
     };
+  }
 
-    this.checkWanderingMonster(true);
+  toJSON() { return { state: this.state, history: this.history, redoStack: this.redoStack }; }
+  
+  fromJSON(data) {
+    if (!data || !data.state) return;
+    this.state = data.state;
+    this.history = data.history || [];
+    this.redoStack = data.redoStack || [];
   }
 
   saveHistory() {
     this.history.push(JSON.stringify(this.state));
-    this.redoStack = [];
+    if (this.redoStack.length > 0) this.redoStack = [];
+    if (this.history.length > 50) this.history.shift();
   }
 
   undo() {
@@ -42,126 +63,160 @@ class TurnTracker {
 
   addLogMessages(msgs) {
     if (!msgs || msgs.length === 0) return;
+    let entry = this.state.fullLog.find(e => e.turn === this.state.currentTurn);
+    if (!entry) {
+      entry = { turn: this.state.currentTurn, messages: [] };
+      this.state.fullLog.push(entry);
+    }
+    msgs.forEach(msg => {
+      if (!entry.messages.includes(msg)) entry.messages.push(msg);
+      if (!this.state.messages) this.state.messages = [];
+      if (!this.state.messages.includes(msg)) this.state.messages.push(msg);
+    });
+  }
+
+  start({ interval = 2, initialLights = [], ambientLight = 'dark', movementRate = 'Unset' } = {}) {
+    if (this.state.started) return;
+
+    this.state.started = true;
+    this.state.monsterInterval = parseInt(interval) >= 0 ? parseInt(interval) : 2;
+    this.state.ambientLight = (ambientLight === 'lit') ? 'lit' : 'dark';
+    this.state.movementRate = movementRate || 'Unset';
     
-    const lastEntry = this.state.fullLog[this.state.fullLog.length - 1];
-    if (lastEntry && lastEntry.turn === this.state.currentTurn) {
-      lastEntry.messages.push(...msgs);
+    this.addLogMessages([
+      "Adventure begins!",
+      `Movement Rate: ${this.state.movementRate}`,
+      this.state.monsterInterval > 0 
+        ? `Monster check frequency: every ${this.state.monsterInterval} turn(s).`
+        : "Monster checks are disabled.",
+      this.state.ambientLight === 'lit' ? "The area is illuminated by ambient light." : "The area is dark."
+    ]);
+
+    if (Array.isArray(initialLights)) {
+      initialLights.forEach(l => {
+        this.activateLight(l.type, l.label, false);
+      });
+    }
+
+    this.checkWanderingMonster(true);
+  }
+
+  setMovementRate(rate) {
+    this.saveHistory();
+    this.state.movementRate = rate;
+    this.addLogMessages([`Party movement rate set to ${rate}.`]);
+  }
+
+  toggleAmbientLight() {
+    this.saveHistory();
+    this.state.ambientLight = this.state.ambientLight === 'dark' ? 'lit' : 'dark';
+    const msg = this.state.ambientLight === 'lit' 
+      ? "The area is illuminated by ambient light." 
+      : "The party enters a lightless area.";
+    this.addLogMessages([msg]);
+  }
+
+  activateLight(type, label = "Party", shouldSave = true) {
+    if (shouldSave) this.saveHistory();
+    
+    const maxTurns = type === 'lantern' ? 24 : 6;
+    const cleanLabel = label.trim() || "Party";
+    
+    const existing = this.state.activeLights.find(l => l.label === cleanLabel && l.type === type);
+    
+    if (existing) {
+        existing.turnsRemaining = maxTurns;
+        this.addLogMessages([`${cleanLabel}'s ${type} refreshed. It will last for ${maxTurns} turns starting NEXT turn.`]);
     } else {
-      this.state.fullLog.push({ turn: this.state.currentTurn, messages: [...msgs] });
+        const newLight = {
+            id: Date.now() + Math.random(),
+            label: cleanLabel,
+            type: type,
+            turnsRemaining: maxTurns - 1
+        };
+        this.state.activeLights.push(newLight);
+        this.addLogMessages([`${cleanLabel} lit a ${type}. It will last for ${maxTurns} turns.`]);
     }
-    this.state.messages = msgs;
   }
 
-  lightTorch() {
-    this.saveHistory();
-    this.state.turnsLeftOnTorch = 6;
-    this.addLogMessages(["Torch lit. It will last for 6 turns (1 hour)."]);
-  }
-
-  extinguishTorch() {
-    if (this.state.turnsLeftOnTorch > 0) {
+  extinguishLight(id) {
+    const index = this.state.activeLights.findIndex(l => l.id === id);
+    if (index !== -1) {
       this.saveHistory();
-      this.state.turnsLeftOnTorch = 0;
-      this.addLogMessages(["Torch extinguished."]);
+      const light = this.state.activeLights[index];
+      this.state.activeLights.splice(index, 1);
+      this.addLogMessages([`${light.label}'s ${light.type} extinguished.`]);
     }
-  }
-
-  rest(notes) {
-    this.saveHistory();
-
-    if (notes) {
-      this.addLogMessages([`Note: ${notes}`]);
-    }
-
-    this.state.penalty = 0;
-    this.state.currentTurn++;
-    this.state.turnsSinceRest = 0;
-    
-    const turnMessages = ["Party rested. Fatigue penalty removed."];
-    
-    // Torch consumption during rest
-    if (this.state.turnsLeftOnTorch > 0) {
-      this.state.turnsLeftOnTorch--;
-      if (this.state.turnsLeftOnTorch === 0) {
-        turnMessages.push("The torch burns out!");
-      }
-    }
-
-    this.addLogMessages(turnMessages);
-    this.checkWanderingMonster(false);
   }
 
   nextTurn(notes) {
+    if (!this.state.started) return;
     this.saveHistory();
-
-    if (notes) {
-      this.addLogMessages([`Note: ${notes}`]);
-    }
-
+    if (notes) this.addLogMessages([`Note: ${notes}`]);
     this.state.currentTurn++;
     this.state.turnsSinceRest++;
-
-    const turnMessages = [];
-
-    // Torch consumption
-    if (this.state.turnsLeftOnTorch > 0) {
-      this.state.turnsLeftOnTorch--;
-      if (this.state.turnsLeftOnTorch === 0) {
-        turnMessages.push("The torch burns out!");
-      }
-    }
-
-    // Rest check: B/X says rest every 6th turn (after 5 turns of activity)
-    if (this.state.turnsSinceRest === 5) {
-      turnMessages.push("WARNING: This is the 6th turn. The party must REST this turn or suffer a penalty.");
-    } else if (this.state.turnsSinceRest >= 6) {
-      this.state.penalty = -1;
-      turnMessages.push("The party did not rest! They are exhausted: -1 penalty to all rolls until rested.");
-    }
-
-    this.addLogMessages(turnMessages);
+    this.state.messages = []; 
+    this.processTurnConsumption();
     this.checkWanderingMonster(false);
   }
 
-  setMonsterInterval(interval) {
-    const intervalInt = parseInt(interval, 10);
-    if (isNaN(intervalInt) || intervalInt < 0) return;
-
+  rest(notes) {
+    if (!this.state.started) return;
     this.saveHistory();
-    this.state.monsterInterval = intervalInt;
-    this.addLogMessages([`Wandering monster check interval set to ${intervalInt}.`]);
+    if (notes) this.addLogMessages([`Note: ${notes}`]);
+    this.state.penalty = 0;
+    this.state.currentTurn++;
+    this.state.turnsSinceRest = 0;
+    this.state.messages = [];
+    this.addLogMessages(["Party rested. Fatigue penalty removed."]);
+    this.processTurnConsumption();
+    this.checkWanderingMonster(false);
+  }
+
+  processTurnConsumption() {
+    const expiredIds = [];
+    
+    this.state.activeLights.forEach(light => {
+      light.turnsRemaining--;
+      if (light.turnsRemaining === 0) {
+        this.addLogMessages([`WARNING: ${light.label}'s ${light.type} is flickering and will soon burn out!`]);
+      } else if (light.turnsRemaining === -1) {
+        this.addLogMessages([`The ${light.type} held by ${light.label} burns out!`]);
+        expiredIds.push(light.id);
+      }
+    });
+
+    this.state.activeLights = this.state.activeLights.filter(l => !expiredIds.includes(l.id));
+
+    if (this.state.turnsSinceRest === 5) {
+      this.addLogMessages(["WARNING: This is the 6th turn. The party must REST this turn or suffer a penalty."]);
+    } else if (this.state.turnsSinceRest >= 6) {
+      this.state.penalty = -1;
+      this.addLogMessages(["The party did not rest! They are exhausted: -1 penalty to all rolls until rested."]);
+    }
   }
 
   checkWanderingMonster(isInitial) {
-    if (this.state.monsterInterval <= 0) return;
-
-    // Check every monsterInterval turns
-    if (this.state.currentTurn % this.state.monsterInterval === 0) {
-      const roll = this.rollDie();
-      const msg = roll === 1 
-        ? `Wandering Monster Check: Rolled ${roll} - ENCOUNTER!` 
-        : `Wandering Monster Check: Rolled ${roll} - No encounter.`;
-      
-      const lastEntry = this.state.fullLog[this.state.fullLog.length - 1];
-      if (lastEntry && lastEntry.turn === this.state.currentTurn) {
-        lastEntry.messages.push(msg);
-      } else {
-        this.state.fullLog.push({ turn: this.state.currentTurn, messages: [msg] });
-      }
-      
-      if (!isInitial) {
-        this.state.messages.push(msg);
+    const interval = this.state.monsterInterval;
+    if (interval <= 0) return;
+    if (this.state.currentTurn % interval === 0) {
+      const entry = this.state.fullLog.find(e => e.turn === this.state.currentTurn);
+      const alreadyRolled = entry && entry.messages.some(m => m.includes("Wandering Monster Check:"));
+      if (!alreadyRolled) {
+        const roll = this.rollDie();
+        const msg = roll === 1 ? `Wandering Monster Check: Rolled ${roll} - ENCOUNTER!` : `Wandering Monster Check: Rolled ${roll} - No encounter.`;
+        this.addLogMessages([msg]);
       }
     }
   }
 
-  getStatus() {
-    return {
-      ...this.state,
-      canUndo: this.history.length > 0,
-      canRedo: this.redoStack.length > 0
-    };
+  manualMonsterCheck() {
+    this.saveHistory();
+    const roll = this.rollDie();
+    this.addLogMessages([`Manual Wandering Monster Check: Rolled ${roll}`]);
   }
+
+  getStatus() { return { ...this.state, canUndo: this.history.length > 0, canRedo: this.redoStack.length > 0 }; }
 }
 
 module.exports = TurnTracker;
