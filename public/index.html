@@ -1,25 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>B/X D&D Turn Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { padding: 20px; background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { padding: 20px; background-color: var(--bs-body-bg); color: var(--bs-body-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: background-color 0.3s, color 0.3s; }
         .status-card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .log-box { height: 500px; overflow-y: auto; border: 1px solid #dee2e6; background-color: white; padding: 15px; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-        .monster-alert { color: #dc3545; font-weight: bold; background-color: #fff5f5; padding: 2px 5px; border-radius: 3px; }
+        .log-box { height: 500px; overflow-y: auto; border: 1px solid var(--bs-border-color); background-color: var(--bs-tertiary-bg); padding: 15px; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+        
+        /* Dark mode specific overrides for log box text colors if needed */
+        [data-bs-theme="dark"] .log-box { background-color: #1e1e1e; }
+        
+        .monster-alert { color: #dc3545; font-weight: bold; background-color: rgba(220, 53, 69, 0.1); padding: 2px 5px; border-radius: 3px; }
         .torch-alert { color: #fd7e14; }
         .rest-alert { color: #198754; }
-        .turn-header { font-weight: bold; border-bottom: 1px solid #eee; margin-top: 10px; color: #6c757d; display: flex; justify-content: space-between; }
+        .turn-header { font-weight: bold; border-bottom: 1px solid var(--bs-border-color); margin-top: 10px; color: var(--bs-secondary-color); display: flex; justify-content: space-between; }
         .penalty-alert { color: #6f42c1; font-weight: bold; }
-        .warning-alert { color: #856404; background-color: #fff3cd; padding: 2px 5px; border-radius: 3px; }
-        .config-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6; }
-        .note-text { font-style: italic; color: #555; }
+        .warning-alert { color: #856404; background-color: rgba(255, 243, 205, 0.2); padding: 2px 5px; border-radius: 3px; }
+        [data-bs-theme="dark"] .warning-alert { color: #ffda6a; }
+        
+        .config-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--bs-border-color); }
+        .note-text { font-style: italic; color: var(--bs-secondary-color); }
+        
+        .theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 1000; }
     </style>
 </head>
 <body>
+    <div class="theme-toggle">
+        <button id="themeBtn" class="btn btn-outline-secondary" onclick="toggleTheme()">
+            <span id="themeIcon">🌙</span> Dark Mode
+        </button>
+    </div>
+
     <div class="container">
         <h1 class="text-center mb-4">B/X D&D Turn Tracker</h1>
         
@@ -84,6 +98,32 @@
     </div>
 
     <script>
+        // Theme Management
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-bs-theme', theme);
+            localStorage.setItem('theme', theme);
+            const btn = document.getElementById('themeBtn');
+            const icon = document.getElementById('themeIcon');
+            if (theme === 'dark') {
+                icon.innerText = '☀️';
+                btn.innerHTML = '<span id="themeIcon">☀️</span> Light Mode';
+                btn.className = 'btn btn-outline-light';
+            } else {
+                icon.innerText = '🌙';
+                btn.innerHTML = '<span id="themeIcon">🌙</span> Dark Mode';
+                btn.className = 'btn btn-outline-secondary';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        }
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        setTheme(savedTheme);
+
         function formatTime(turn) {
             const minutesTotal = (turn - 1) * 10;
             const hours = Math.floor(minutesTotal / 60);
