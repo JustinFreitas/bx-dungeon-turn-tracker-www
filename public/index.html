@@ -34,6 +34,9 @@
         #setupOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1040; display: flex; align-items: center; justify-content: center; }
         .setup-card { width: 100%; max-width: 600px; padding: 0; border: none; }
         
+        /* Auth Overlay */
+        #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 3000; display: flex; align-items: center; justify-content: center; }
+        
         .light-item { font-size: 0.85rem; border-bottom: 1px solid var(--bs-border-color); padding: 5px 0; }
         .light-item:last-child { border-bottom: none; }
 
@@ -41,8 +44,28 @@
     </style>
 </head>
 <body>
+    <!-- Auth Overlay -->
+    <div id="authOverlay">
+        <div class="card setup-card shadow-lg" data-bs-theme="dark">
+            <div class="card-header bg-danger text-white py-3">
+                <h4 class="mb-0 text-center">Dungeon Access Restricted</h4>
+            </div>
+            <div class="card-body p-4">
+                <form onsubmit="event.preventDefault(); handleAuth();">
+                    <p class="text-center">Please enter the Dungeon Master access key.</p>
+                    <div class="mb-3">
+                        <input type="password" id="globalAuthKey" name="master_auth" class="form-control form-control-lg text-center" autocomplete="current-password" placeholder="Access Key">
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">UNLOCK TRACKER</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Setup Overlay -->
-    <div id="setupOverlay">
+    <div id="setupOverlay" style="display:none;">
         <div class="card setup-card shadow-lg" data-bs-theme="dark">
             <div class="card-header bg-primary text-white py-3">
                 <h4 class="mb-0 text-center">Dungeon Setup</h4>
@@ -69,11 +92,6 @@
                                     <option value="30/10">30' / 10'</option>
                                     <option value="0/0">0/0</option>
                                 </select>
-                            </div>
-
-                            <div class="mb-4 border-bottom pb-3">
-                                <label class="form-label fw-bold">Admin Key (For Saves)</label>
-                                <input type="password" id="setupAdminKeyInput" name="dungeon_master_key" class="form-control form-control-sm" autocomplete="current-password" placeholder="Required for loads">
                             </div>
 
                             <div class="mb-4">
@@ -220,15 +238,8 @@
                         <div class="col"><button id="redoBtn" class="btn btn-outline-secondary w-100" onclick="handleAction('redo')" disabled>Redo</button></div>
                     </div>
 
-                    <form id="adminForm" onsubmit="event.preventDefault();">
-                        <div class="config-section">
-                            <h6>Security</h6>
-                            <input type="password" id="adminKeyInput" name="app_admin_key" class="form-control form-control-sm" autocomplete="current-password" placeholder="Admin Key">
-                        </div>
-                    </form>
-
                     <form id="saveForm" onsubmit="event.preventDefault(); handleSave();">
-                        <div class="config-section">
+                        <div class="config-section mt-0 pt-0 border-0">
                             <h6>Save / Restore</h6>
                             <div class="input-group input-group-sm mb-2">
                                 <input type="text" id="saveNameInput" class="form-control" placeholder="Name" autocomplete="off">
@@ -248,7 +259,14 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let setupLights = [];
+        let sessionKey = localStorage.getItem('dm_session_key') || "";
         const logPeekModal = new bootstrap.Modal(document.getElementById('logPeekModal'));
+
+        function handleAuth() {
+            sessionKey = document.getElementById('globalAuthKey').value.trim();
+            if (!sessionKey) return;
+            init(); // Attempt to load status with new key
+        }
 
         function addSetupLight() {
             const labelInput = document.getElementById('setupLightLabel');
@@ -276,7 +294,6 @@
             setupLights.forEach((l, i) => {
                 const item = document.createElement('div');
                 item.className = 'list-group-item d-flex justify-content-between align-items-center small py-1';
-                // Show 5 or 23 in setup preview to indicate "beyond current"
                 const count = l.type === 'lantern' ? 23 : 5;
                 item.innerHTML = `<span><strong>${l.label}</strong>: ${l.type} (+${count} future turns)</span> 
                     <button class="btn btn-sm btn-outline-danger py-0 px-1 border-0" onclick="removeSetupLight(${i})">&times;</button>`;
@@ -324,6 +341,10 @@
         }
 
         function renderStatus(status) {
+            // If we are here, auth succeeded. Save the key.
+            localStorage.setItem('dm_session_key', sessionKey);
+            document.getElementById('authOverlay').style.display = 'none';
+
             const setupOverlay = document.getElementById('setupOverlay');
             const mainApp = document.getElementById('mainApp');
 
@@ -355,7 +376,6 @@
                 status.activeLights.forEach(l => {
                     const div = document.createElement('div');
                     div.className = 'light-item d-flex justify-content-between align-items-center';
-                    // User want "turns beyond current" label
                     div.innerHTML = `<span><strong>${l.label}</strong>: +${l.turnsRemaining} turns</span>
                         <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('extinguish', '${l.id}')">&times;</button>`;
                     lightsList.appendChild(div);
@@ -422,8 +442,12 @@
                 const response = await fetch('/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: type, value: value, label: label, initialLights: initialLights, ambientLight: ambientLight, movementRate: movementRate })
+                    body: JSON.stringify({ key: sessionKey, action: type, value: value, label: label, initialLights: initialLights, ambientLight: ambientLight, movementRate: movementRate })
                 });
+                if (response.status === 401) {
+                    document.getElementById('authOverlay').style.display = 'flex';
+                    return;
+                }
                 const data = await response.json();
                 if (data.error) { alert(data.error); return; }
                 if (type === 'reset') document.getElementById('log').innerHTML = '';
@@ -460,7 +484,12 @@
             const listDiv = document.getElementById(targetId);
             if (!listDiv) return;
             try {
-                const response = await fetch('/saves');
+                const response = await fetch('/saves', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey })
+                });
+                if (response.status === 401) return;
                 const names = await response.json();
                 listDiv.innerHTML = '';
                 if (names.length === 0) { listDiv.innerHTML = '<div class="list-group-item text-muted small text-center italic py-2">No saves found.</div>'; return; }
@@ -469,30 +498,27 @@
                     btnGrp.className = 'list-group-item d-flex justify-content-between align-items-center small py-1';
                     btnGrp.innerHTML = `<span class="text-truncate" style="max-width: 150px;">${name}</span> 
                         <div class="d-flex gap-1">
-                            <button class="btn btn-outline-info btn-xs" onclick="handlePeek('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">Log</button>
-                            <button class="btn btn-outline-primary btn-xs" onclick="handleLoad('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">Load</button>
-                            <button class="btn btn-outline-danger btn-xs" onclick="handleDelete('${name}', '${targetId === 'setupSaveList' ? 'setupAdminKeyInput' : 'adminKeyInput'}')">&times;</button>
+                            <button class="btn btn-outline-info btn-xs" onclick="handlePeek('${name}')">Log</button>
+                            <button class="btn btn-outline-primary btn-xs" onclick="handleLoad('${name}')">Load</button>
+                            <button class="btn btn-outline-danger btn-xs" onclick="handleDelete('${name}')">&times;</button>
                         </div>`;
                     listDiv.appendChild(btnGrp);
                 });
             } catch (err) {}
         }
 
-        async function handlePeek(name, keyId) {
-            const key = document.getElementById(keyId).value.trim();
-            if (!key) { alert("Key required to peek log."); return; }
+        async function handlePeek(name) {
             const response = await fetch('/peek', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, key })
+                body: JSON.stringify({ name, key: sessionKey })
             });
+            if (response.status === 401) return;
             const data = await response.json();
             if (!response.ok) { alert(data.error); return; }
-            
             document.getElementById('peekSaveName').innerText = name;
             const container = document.getElementById('peekLogContainer');
             container.innerHTML = '';
-            
             data.data.state.fullLog.forEach(entry => {
                 let html = `<div class="fw-bold border-bottom mb-1 mt-2">Turn ${entry.turn}</div>`;
                 entry.messages.forEach(m => html += `<div>- ${m}</div>`);
@@ -501,14 +527,12 @@
             logPeekModal.show();
         }
 
-        async function handleDelete(name, keyId) {
-            const key = document.getElementById(keyId).value.trim();
-            if (!key) { alert("Key required to delete."); return; }
+        async function handleDelete(name) {
             if (!confirm(`Delete save "${name}" permanently?`)) return;
             const response = await fetch('/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, key })
+                body: JSON.stringify({ name, key: sessionKey })
             });
             if (response.ok) loadSaveList('setupSaveList'), loadSaveList('saveList');
             else alert("Delete failed.");
@@ -516,27 +540,32 @@
 
         async function handleSave() {
             const name = document.getElementById('saveNameInput').value.trim();
-            const key = document.getElementById('adminKeyInput').value.trim();
-            if (!name || !key) { alert('Name and Key required.'); return; }
-            const response = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key }) });
+            if (!name) { alert('Name required.'); return; }
+            const response = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key: sessionKey }) });
             if (response.ok) { document.getElementById('saveNameInput').value = ''; loadSaveList('saveList'); } else alert("Save failed.");
         }
 
-        async function handleLoad(name, keyInputId) {
-            const key = document.getElementById(keyInputId).value.trim();
-            if (!key) { alert('Key required.'); return; }
+        async function handleLoad(name) {
             if (!confirm(`Load "${name}"?`)) return;
-            const response = await fetch('/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key }) });
+            const response = await fetch('/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key: sessionKey }) });
             const data = await response.json();
             if (response.ok) renderStatus(data.status); else alert(data.error);
         }
 
         async function init() {
             try {
-                const response = await fetch('/status');
+                const response = await fetch('/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey })
+                });
+                if (response.status === 401) {
+                    document.getElementById('authOverlay').style.display = 'flex';
+                    return;
+                }
                 const status = await response.json();
                 renderStatus(status);
-            } catch (err) { document.getElementById('setupOverlay').style.display = 'flex'; }
+            } catch (err) { document.getElementById('authOverlay').style.display = 'flex'; }
         }
         init();
     </script>

@@ -3,9 +3,9 @@ const TurnTracker = require('../src/tracker');
 describe('TurnTracker Serialization', () => {
   test('toJSON and fromJSON should preserve state', () => {
     const tracker = new TurnTracker(() => 6); 
-    tracker.start(2);
+    tracker.start({ interval: 2 });
     tracker.nextTurn('Turn 2 note'); 
-    tracker.lightTorch();            
+    tracker.activateLight('torch', 'Grog');            
     tracker.nextTurn('Turn 3 note'); 
     
     const serialized = tracker.toJSON();
@@ -13,7 +13,7 @@ describe('TurnTracker Serialization', () => {
     newTracker.fromJSON(serialized);
     
     expect(newTracker.state.currentTurn).toBe(3);
-    expect(newTracker.state.turnsLeftOnTorch).toBe(5);
+    expect(newTracker.state.activeLights[0].turnsRemaining).toBe(4);
     expect(newTracker.state.fullLog.length).toBe(2); // Turn 1, Turn 2. Turn 3 has no messages yet.
     expect(newTracker.history.length).toBe(3);
   });

@@ -18,46 +18,48 @@ describe('TurnTracker', () => {
 
   test('starting with a lit torch', () => {
     const trackerWithTorch = new TurnTracker(mockDie);
-    trackerWithTorch.start({ interval: 2, startWithTorch: true });
+    trackerWithTorch.start({ interval: 2, initialLights: [{ type: 'torch', label: 'Party' }] });
     const status = trackerWithTorch.getStatus();
-    expect(status.turnsLeftOnTorch).toBe(6);
-    expect(status.fullLog[0].messages).toContain("Torch lit. It will last for 6 turns (1 hour).");
+    expect(status.activeLights[0].type).toBe('torch');
+    expect(status.activeLights[0].turnsRemaining).toBe(5);
+    expect(status.fullLog[0].messages).toContain("Party lit a torch. It will last for 6 turns.");
   });
 
   test('lighting a torch', () => {
-    tracker.lightTorch();
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
+    tracker.activateLight('torch', 'Grog');
+    expect(tracker.getStatus().activeLights[0].turnsRemaining).toBe(5);
   });
 
-  test('extinguishing a torch', () => {
-    tracker.lightTorch();
-    tracker.extinguishTorch();
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(0);
-    expect(tracker.getStatus().messages).toContain("Torch extinguished.");
+  test('extinguishing a light', () => {
+    tracker.activateLight('torch', 'Grog');
+    const id = tracker.getStatus().activeLights[0].id;
+    tracker.extinguishLight(id);
+    expect(tracker.getStatus().activeLights.length).toBe(0);
+    expect(tracker.getStatus().messages).toContain("Grog's torch extinguished.");
   });
 
-  test('advancing turn reduces torch duration', () => {
-    tracker.lightTorch(); // 6
-    tracker.nextTurn(); // Turn 2
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(5);
+  test('advancing turn reduces light duration', () => {
+    tracker.activateLight('torch', 'Grog'); // 5 left on T1
+    tracker.nextTurn(); // Turn 2, 4 left
+    expect(tracker.getStatus().activeLights[0].turnsRemaining).toBe(4);
   });
 
   test('rest warning at start of 6th turn (after 5 active turns)', () => {
-    tracker.nextTurn(); // Turn 2, tsr=1
-    tracker.nextTurn(); // Turn 3, tsr=2
-    tracker.nextTurn(); // Turn 4, tsr=3
-    tracker.nextTurn(); // Turn 5, tsr=4
-    tracker.nextTurn(); // Turn 6, tsr=5
+    tracker.nextTurn(); // Turn 2
+    tracker.nextTurn(); // Turn 3
+    tracker.nextTurn(); // Turn 4
+    tracker.nextTurn(); // Turn 5
+    tracker.nextTurn(); // Turn 6
     expect(tracker.getStatus().messages).toContain("WARNING: This is the 6th turn. The party must REST this turn or suffer a penalty.");
   });
 
   test('fatigue penalty applies at turn 7 if no rest at turn 6', () => {
-    tracker.nextTurn(); // T2, tsr=1
-    tracker.nextTurn(); // T3, tsr=2
-    tracker.nextTurn(); // T4, tsr=3
-    tracker.nextTurn(); // T5, tsr=4
-    tracker.nextTurn(); // T6, tsr=5 (warning)
-    tracker.nextTurn(); // T7, tsr=6 (penalty)
+    tracker.nextTurn(); // T2
+    tracker.nextTurn(); // T3
+    tracker.nextTurn(); // T4
+    tracker.nextTurn(); // T5
+    tracker.nextTurn(); // T6 (warning)
+    tracker.nextTurn(); // T7 (penalty)
     expect(tracker.getStatus().penalty).toBe(-1);
     expect(tracker.getStatus().messages).toContain("The party did not rest! They are exhausted: -1 penalty to all rolls until rested.");
   });
@@ -76,7 +78,6 @@ describe('TurnTracker', () => {
   });
 
   test('configurable wandering monster interval', () => {
-    // Reset tracker to set new interval at start
     tracker = new TurnTracker(mockDie);
     tracker.start({ interval: 3 });
     expect(tracker.getStatus().monsterInterval).toBe(3);
@@ -100,42 +101,41 @@ describe('TurnTracker', () => {
   });
 
   test('undo/redo functionality works for turn advances', () => {
-    tracker.lightTorch();
+    tracker.activateLight('torch', 'Grog');
     tracker.nextTurn(); // Turn 2
     expect(tracker.getStatus().currentTurn).toBe(2);
 
     tracker.undo(); // Back to T1 (after torch lit)
     expect(tracker.getStatus().currentTurn).toBe(1);
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
+    expect(tracker.getStatus().activeLights[0].turnsRemaining).toBe(5);
 
     tracker.redo(); // Back to T2
     expect(tracker.getStatus().currentTurn).toBe(2);
   });
 
   test('undo/redo works for settings and actions', () => {
-    // Torch undo
-    tracker.lightTorch();
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
+    tracker.activateLight('torch', 'Grog');
+    expect(tracker.getStatus().activeLights.length).toBe(1);
     tracker.undo();
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(0);
+    expect(tracker.getStatus().activeLights.length).toBe(0);
     tracker.redo();
-    expect(tracker.getStatus().turnsLeftOnTorch).toBe(6);
+    expect(tracker.getStatus().activeLights.length).toBe(1);
   });
 
   test('resting advances turn and resets counters', () => {
-    tracker.nextTurn(); // Turn 2, tsr=1
-    tracker.rest(); // Turn 3, tsr=0
+    tracker.nextTurn(); // Turn 2
+    tracker.rest(); // Turn 3
     expect(tracker.getStatus().currentTurn).toBe(3);
     expect(tracker.getStatus().turnsSinceRest).toBe(0);
     expect(tracker.getStatus().penalty).toBe(0);
   });
 
   test('log grouping for multiple actions in one turn', () => {
-    tracker.lightTorch();
+    tracker.activateLight('torch', 'Grog');
     const status = tracker.getStatus();
     const turn1Log = status.fullLog.find(e => e.turn === 1);
     expect(turn1Log.messages).toContain("Adventure begins!");
-    expect(turn1Log.messages).toContain("Torch lit. It will last for 6 turns (1 hour).");
+    expect(turn1Log.messages).toContain("Grog lit a torch. It will last for 6 turns.");
   });
 
   test('adding notes to next turn', () => {
