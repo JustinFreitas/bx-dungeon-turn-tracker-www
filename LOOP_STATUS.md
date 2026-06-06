@@ -1,36 +1,21 @@
-# Loop Status - OSR Dungeon Turn Tracker WWW
+# Loop Status - 2026-06-06
 
-## Status Update: 2026-06-06
+## Summary of Changes
+- Implemented HTTPS support in `index.js`.
+- Configured PM2 (`ecosystem.config.js`) to use existing SSL certificates from FoundryVTT.
+- Verified that the server correctly identifies certificates and starts in HTTPS mode.
+- Synchronized local branch with remote (rebased to resolve divergence).
+- Merged "Global Access Gate" changes from remote into the HTTPS-enabled `index.js`.
+- Sanitized repository:
+    - Created `ecosystem.config.example.js` with benign settings.
+    - Removed `ecosystem.config.js` from git tracking and added it to `.gitignore`.
+    - Restored local `ecosystem.config.js` with private settings.
 
-### Current Progress
-- [x] Initialized Git repository.
-- [x] Verified existing implementation against GEMINI.md requirements.
-- [x] Enhanced Undo/Redo functionality to cover "settings" like lighting torches and changing monster intervals.
-- [x] Verified all requirements through unit tests (17/17 passing).
-- [x] UI handles real-time conversion and log display correctly.
-- [x] Implemented Save/Restore mechanism with naming support.
-- [x] Added security measures (Admin Key, Rate Limiting, Sanitization, and Resource Limits).
-- [x] Renamed project to `osr-dungeon-turn-tracker-www`.
+## Git State
+- Local branch is 1 commit ahead of `origin/master`.
+- Divergence resolved via rebase.
+- Working directory is clean.
 
-### Changes Made
-1. **Project Renaming**:
-   - Updated `package.json` name to `osr-dungeon-turn-tracker-www`.
-   - Updated `GEMINI.md` and `LOOP_STATUS.md` titles.
-2. **Security Features**:
-   - Admin Key, Rate Limiting, Payload Limits, and Sanitization.
-3. **UI Layout**:
-   - Implemented a three-column layout for better balance and usability.
-
-### Verification
-- `npm test` passed with 17 tests.
-- UI layout and security features manually reviewed.
-
-### Next Steps
-- Task complete.
-
-### Success Criteria Check
-- [x] Code compiles without errors.
-- [x] All unit tests pass.
-- [x] Build a web based node application that serves as a B/X D&D dungeon turn tracker.
-- [x] Implement save/restore with custom naming.
-- [x] Implement basic security and DOS prevention.
+## Verification
+- Server confirmed running at `https://justin-at.mywire.org:3000/`.
+- `index.js` contains both HTTPS startup logic and `checkAuth` middleware.
