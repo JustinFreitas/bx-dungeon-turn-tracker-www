@@ -1,21 +1,18 @@
-# Loop Status - 2026-06-06
+# Loop Status - Investigating "Unknown action" error
 
-## Summary of Changes
-- Implemented HTTPS support in `index.js`.
-- Configured PM2 (`ecosystem.config.js`) to use existing SSL certificates from FoundryVTT.
-- Verified that the server correctly identifies certificates and starts in HTTPS mode.
-- Synchronized local branch with remote (rebased to resolve divergence).
-- Merged "Global Access Gate" changes from remote into the HTTPS-enabled `index.js`.
-- Sanitized repository:
-    - Created `ecosystem.config.example.js` with benign settings.
-    - Removed `ecosystem.config.js` from git tracking and added it to `.gitignore`.
-    - Restored local `ecosystem.config.js` with private settings.
+## Attempt 1
+- **Observation:** User reported "Unknown action" error when adding an effect.
+- **Hypothesis:** Typho in `index.js` or casing issue.
+- **Action:** Searched for "Unknown action" in `index.js`. Found `case 'addEffect':`.
+- **Result:** Code looked correct, but `Select-String` showed trailing spaces on the line.
 
-## Git State
-- Local branch is 1 commit ahead of `origin/master`.
-- Divergence resolved via rebase.
-- Working directory is clean.
+## Attempt 2
+- **Observation:** `reproduce_error.js` showed `addEffect` worked, but `AddEffect` failed with 400.
+- **Hypothesis:** Casing or whitespace issue.
+- **Action:** Modified `index.js` to use `action.toLowerCase().trim()` and updated `switch` cases to lowercase.
+- **Result:** Reproduced 400 with `AddEffect` on old server, fixed on new server (port 3002).
 
-## Verification
-- Server confirmed running at `https://justin-at.mywire.org:3000/`.
-- `index.js` contains both HTTPS startup logic and `checkAuth` middleware.
+## Attempt 3
+- **Observation:** All unit tests pass.
+- **Action:** Applied robust action parsing to `index.js`.
+- **Result:** Successfully handled `AddEffect` and other casing/whitespace variants.

@@ -136,7 +136,8 @@ app.post('/load', checkAuth, (req, res) => {
 app.post('/action', checkAuth, (req, res) => {
   const { action, value, label, initialLights, ambientLight, movementRate, duration } = req.body;
   
-  switch (action) {
+  const actionLower = action ? action.toLowerCase().trim() : '';
+  switch (actionLower) {
     case 'reset':
       tracker = new TurnTracker();
       break;
@@ -154,19 +155,19 @@ app.post('/action', checkAuth, (req, res) => {
     case 'rest':
       tracker.rest(value);
       break;
-    case 'lightSource':
+    case 'lightsource':
       tracker.activateLight(value, label);
       break;
     case 'extinguish':
       tracker.extinguishLight(value);
       break;
-    case 'addEffect':
+    case 'addeffect':
       tracker.addEffect(label, duration);
       break;
-    case 'removeEffect':
+    case 'removeeffect':
       tracker.removeEffect(value);
       break;
-    case 'setMovementRate':
+    case 'setmovementrate':
       tracker.setMovementRate(value);
       break;
     case 'undo':
@@ -175,13 +176,14 @@ app.post('/action', checkAuth, (req, res) => {
     case 'redo':
       tracker.redo();
       break;
-    case 'rollMonster':
+    case 'rollmonster':
       tracker.manualMonsterCheck();
       break;
-    case 'toggleAmbient':
+    case 'toggleambient':
       tracker.toggleAmbientLight();
       break;
     default:
+      console.log('Unknown action received:', action);
       return res.status(400).json({ error: 'Unknown action' });
   }
   
