@@ -183,6 +183,10 @@
                             <div class="small text-muted mb-1 italic" style="font-size: 0.75rem;">(Turns remaining after this one)</div>
                             <div id="activeLightsList" class="mt-1"></div>
                         </div>
+                        <div class="border-top pt-2">
+                            <strong>Spell/Effect Durations:</strong>
+                            <div id="activeEffectsList" class="mt-1"></div>
+                        </div>
                         <p class="mt-2 border-top pt-2">
                             <strong>Movement Rate:</strong>
                             <select id="movementRateInput" class="form-select form-select-sm d-inline-block w-auto" onchange="handleAction('setMovementRate', this.value)">
@@ -208,20 +212,26 @@
                 <div class="d-grid gap-2">
                     <button class="btn btn-primary btn-lg" onclick="handleTurnAction('next')">Next Turn (Move/Search)</button>
                     <button class="btn btn-success" onclick="handleTurnAction('rest')">Rest (1 Turn)</button>
+                    
                     <div class="config-section mt-1 pt-1 border-0">
-                        <label class="form-label small fw-bold mb-1">Light New Source</label>
+                        <label class="form-label small fw-bold mb-1">Active Resources</label>
                         <div class="input-group input-group-sm mb-1">
-                            <input type="text" id="lightHolderName" class="form-control" placeholder="Character Name..." autocomplete="off">
+                            <input type="text" id="lightHolderName" class="form-control" placeholder="Character/Effect Name..." autocomplete="off">
                         </div>
-                        <div class="row g-2">
+                        <div class="row g-2 mb-1">
                             <div class="col">
-                                <button class="btn btn-warning w-100" onclick="handleLightAction('torch')">Torch</button>
+                                <button class="btn btn-warning btn-sm w-100" onclick="handleLightAction('torch')">Torch</button>
                             </div>
                             <div class="col">
-                                <button class="btn btn-info w-100" onclick="handleLightAction('lantern')">Lantern</button>
+                                <button class="btn btn-info btn-sm w-100" onclick="handleLightAction('lantern')">Lantern</button>
                             </div>
+                        </div>
+                        <div class="input-group input-group-sm mb-2">
+                            <input type="number" id="effectDuration" class="form-control" placeholder="Turns..." min="1">
+                            <button class="btn btn-outline-primary btn-sm" onclick="handleAddEffect()">Add Effect</button>
                         </div>
                     </div>
+                    
                     <button class="btn btn-outline-danger btn-sm mt-1" onclick="handleAction('rollMonster')">Roll Wandering Monster Now</button>
                 </div>
             </div>
@@ -368,6 +378,7 @@
             penaltyBadge.innerText = status.penalty;
             penaltyBadge.className = status.penalty < 0 ? 'badge bg-danger' : 'badge bg-secondary';
 
+            // Active Lights
             const lightsList = document.getElementById('activeLightsList');
             lightsList.innerHTML = '';
             if (status.activeLights.length === 0) {
@@ -379,6 +390,21 @@
                     div.innerHTML = `<span><strong>${l.label}</strong>: +${l.turnsRemaining} turns</span>
                         <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('extinguish', '${l.id}')">&times;</button>`;
                     lightsList.appendChild(div);
+                });
+            }
+
+            // Active Effects
+            const effectsList = document.getElementById('activeEffectsList');
+            effectsList.innerHTML = '';
+            if (!status.activeEffects || status.activeEffects.length === 0) {
+                effectsList.innerHTML = '<span class="text-muted small italic">None active</span>';
+            } else {
+                status.activeEffects.forEach(e => {
+                    const div = document.createElement('div');
+                    div.className = 'light-item d-flex justify-content-between align-items-center';
+                    div.innerHTML = `<span><strong>${e.label}</strong>: +${e.turnsRemaining} turns</span>
+                        <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('removeEffect', '${e.id}')">&times;</button>`;
+                    effectsList.appendChild(div);
                 });
             }
 
@@ -424,6 +450,7 @@
                     if (msg.includes('ENCOUNTER!')) cssClass = 'monster-alert';
                     else if (msg.includes('No encounter')) cssClass = 'monster-none';
                     else if (msg.includes('lit') || msg.includes('refreshed') || msg.includes('lantern') || msg.includes('torch')) cssClass = 'torch-alert';
+                    else if (msg.includes('Effect')) cssClass = 'text-primary fw-bold';
                     else if (msg.includes('rested')) cssClass = 'rest-alert';
                     else if (msg.includes('exhausted')) cssClass = 'penalty-alert';
                     else if (msg.includes('WARNING')) cssClass = 'warning-alert';
@@ -437,12 +464,12 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        async function handleAction(type, value, label = null, initialLights = null, ambientLight = null, movementRate = null) {
+        async function handleAction(type, value, label = null, initialLights = null, ambientLight = null, movementRate = null, duration = null) {
             try {
                 const response = await fetch('/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: sessionKey, action: type, value: value, label: label, initialLights: initialLights, ambientLight: ambientLight, movementRate: movementRate })
+                    body: JSON.stringify({ key: sessionKey, action: type, value: value, label: label, initialLights: initialLights, ambientLight: ambientLight, movementRate: movementRate, duration: duration })
                 });
                 if (response.status === 401) {
                     document.getElementById('authOverlay').style.display = 'flex';
@@ -459,6 +486,15 @@
             const holder = document.getElementById('lightHolderName').value.trim() || "Party";
             await handleAction('lightSource', type, holder);
             document.getElementById('lightHolderName').value = '';
+        }
+
+        async function handleAddEffect() {
+            const name = document.getElementById('lightHolderName').value.trim();
+            const dur = document.getElementById('effectDuration').value;
+            if (!name || !dur) { alert("Name and Duration required."); return; }
+            await handleAction('addEffect', null, name, null, null, null, dur);
+            document.getElementById('lightHolderName').value = '';
+            document.getElementById('effectDuration').value = '';
         }
 
         async function handleStartAdventure() {

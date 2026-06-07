@@ -2,8 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
-const http = require('http');
-const https = require('https');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const hpp = require('hpp');
@@ -15,23 +13,6 @@ const port = process.env.PORT || 3000;
 const SAVES_FILE = path.join(__dirname, 'saves.json');
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dungeon-master';
 const MAX_SAVES = 50;
-
-// SSL Configuration
-const sslCertPath = process.env.SSL_CERT;
-const sslKeyPath = process.env.SSL_KEY;
-let server;
-let protocol = 'http';
-
-if (sslCertPath && sslKeyPath && fs.existsSync(sslCertPath) && fs.existsSync(sslKeyPath)) {
-  const options = {
-    cert: fs.readFileSync(sslCertPath),
-    key: fs.readFileSync(sslKeyPath)
-  };
-  server = https.createServer(options, app);
-  protocol = 'https';
-} else {
-  server = http.createServer(app);
-}
 
 let tracker = new TurnTracker();
 
@@ -96,6 +77,7 @@ app.get('/player-status', (req, res) => {
     currentTurn: status.currentTurn,
     turnsSinceRest: status.turnsSinceRest,
     activeLights: status.activeLights,
+    activeEffects: status.activeEffects,
     penalty: status.penalty,
     ambientLight: status.ambientLight,
     movementRate: status.movementRate
@@ -152,7 +134,7 @@ app.post('/load', checkAuth, (req, res) => {
 });
 
 app.post('/action', checkAuth, (req, res) => {
-  const { action, value, label, initialLights, ambientLight, movementRate } = req.body;
+  const { action, value, label, initialLights, ambientLight, movementRate, duration } = req.body;
   
   switch (action) {
     case 'reset':
@@ -178,6 +160,12 @@ app.post('/action', checkAuth, (req, res) => {
     case 'extinguish':
       tracker.extinguishLight(value);
       break;
+    case 'addEffect':
+      tracker.addEffect(label, duration);
+      break;
+    case 'removeEffect':
+      tracker.removeEffect(value);
+      break;
     case 'setMovementRate':
       tracker.setMovementRate(value);
       break;
@@ -200,7 +188,7 @@ app.post('/action', checkAuth, (req, res) => {
   res.json({ success: true, status: tracker.getStatus() });
 });
 
-server.listen(port, () => {
-  console.log(`B/X D&D Turn Tracker listening at ${protocol}://localhost:${port}`);
+app.listen(port, () => {
+  console.log(`B/X D&D Turn Tracker listening at http://localhost:${port}`);
   console.log(`Admin key is: ${ADMIN_KEY}`);
 });

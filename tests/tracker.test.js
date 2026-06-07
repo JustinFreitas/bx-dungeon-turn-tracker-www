@@ -44,6 +44,25 @@ describe('TurnTracker', () => {
     expect(tracker.getStatus().activeLights[0].turnsRemaining).toBe(4);
   });
 
+  test('spell/effect duration tracking', () => {
+    tracker.addEffect('Bless', 6);
+    expect(tracker.getStatus().activeEffects[0].label).toBe('Bless');
+    expect(tracker.getStatus().activeEffects[0].turnsRemaining).toBe(5);
+    
+    tracker.nextTurn(); // Turn 2, 4 left
+    expect(tracker.getStatus().activeEffects[0].turnsRemaining).toBe(4);
+    
+    tracker.nextTurn(); // Turn 3, 3 left
+    tracker.nextTurn(); // Turn 4, 2 left
+    tracker.nextTurn(); // Turn 5, 1 left
+    tracker.nextTurn(); // Turn 6, 0 left (warning)
+    expect(tracker.getStatus().messages).toContain("WARNING: The effect 'Bless' is ending soon!");
+    
+    tracker.nextTurn(); // Turn 7, -1 (burnout)
+    expect(tracker.getStatus().activeEffects.length).toBe(0);
+    expect(tracker.getStatus().messages).toContain("The effect 'Bless' has ended.");
+  });
+
   test('rest warning at start of 6th turn (after 5 active turns)', () => {
     tracker.nextTurn(); // Turn 2
     tracker.nextTurn(); // Turn 3

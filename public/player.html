@@ -67,9 +67,12 @@
                         </div>
 
                         <div class="mt-4 border-top pt-3">
-                            <h5 class="fw-bold mb-3">Active Light Sources</h5>
+                            <h5 class="fw-bold mb-3">Active Resources</h5>
                             <div id="activeLightsList">
                                 <!-- Lights list -->
+                            </div>
+                            <div id="activeEffectsList" class="mt-2">
+                                <!-- Effects list -->
                             </div>
                             <div class="small text-muted mt-2 italic" style="font-size: 0.75rem;">(Turns remaining after this one)</div>
                         </div>
@@ -125,15 +128,29 @@
                 // Active Lights
                 const lightsList = document.getElementById('activeLightsList');
                 lightsList.innerHTML = '';
-                if (status.activeLights.length === 0) {
-                    lightsList.innerHTML = '<div class="text-muted italic">All sources extinguished.</div>';
-                } else {
+                if (status.activeLights && status.activeLights.length > 0) {
                     status.activeLights.forEach(l => {
                         const div = document.createElement('div');
                         div.className = 'light-item d-flex justify-content-between align-items-center';
                         div.innerHTML = `<span><strong>${l.label}</strong>'s ${l.type}</span> <span class="badge bg-warning text-dark">+${l.turnsRemaining} turns</span>`;
                         lightsList.appendChild(div);
                     });
+                }
+
+                // Active Effects
+                const effectsList = document.getElementById('activeEffectsList');
+                effectsList.innerHTML = '';
+                if (status.activeEffects && status.activeEffects.length > 0) {
+                    status.activeEffects.forEach(e => {
+                        const div = document.createElement('div');
+                        div.className = 'light-item d-flex justify-content-between align-items-center';
+                        div.innerHTML = `<span><strong>${e.label}</strong> (Effect)</span> <span class="badge bg-info text-dark">+${e.turnsRemaining} turns</span>`;
+                        effectsList.appendChild(div);
+                    });
+                }
+
+                if ((!status.activeLights || status.activeLights.length === 0) && (!status.activeEffects || status.activeEffects.length === 0)) {
+                    lightsList.innerHTML = '<div class="text-muted italic">No active resources.</div>';
                 }
 
                 // Visibility Logic
@@ -144,7 +161,7 @@
                     statusCard.classList.remove('visibility-warning');
                     visibilityBadge.innerHTML = '';
                 } else {
-                    if (status.activeLights.length === 0) {
+                    if (!status.activeLights || status.activeLights.length === 0) {
                         statusCard.classList.add('visibility-warning');
                         visibilityBadge.innerHTML = '<span class="badge bg-danger">NO VISIBILITY</span>';
                     } else {

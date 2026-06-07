@@ -19,6 +19,7 @@ class TurnTracker {
       currentTurn: 1,
       turnsSinceRest: 0,
       activeLights: [], // Array of { id, label, type, turnsRemaining }
+      activeEffects: [], // Array of { id, label, turnsRemaining }
       penalty: 0,
       monsterInterval: 2,
       movementRate: 'Unset', // '120/40', '90/30', '60/20', '30/10'
@@ -149,6 +150,38 @@ class TurnTracker {
     }
   }
 
+  addEffect(label, turns) {
+    const turnsInt = parseInt(turns);
+    if (!label || isNaN(turnsInt) || turnsInt <= 0) return;
+
+    this.saveHistory();
+    const cleanLabel = label.trim();
+    
+    const existing = this.state.activeEffects.find(e => e.label === cleanLabel);
+    if (existing) {
+        existing.turnsRemaining = turnsInt;
+        this.addLogMessages([`Effect '${cleanLabel}' refreshed. It will last for ${turnsInt} turns starting NEXT turn.`]);
+    } else {
+        const newEffect = {
+            id: Date.now() + Math.random(),
+            label: cleanLabel,
+            turnsRemaining: turnsInt - 1
+        };
+        this.state.activeEffects.push(newEffect);
+        this.addLogMessages([`Effect '${cleanLabel}' started. It will last for ${turnsInt} turns.`]);
+    }
+  }
+
+  removeEffect(id) {
+    const index = this.state.activeEffects.findIndex(e => e.id === id);
+    if (index !== -1) {
+      this.saveHistory();
+      const effect = this.state.activeEffects[index];
+      this.state.activeEffects.splice(index, 1);
+      this.addLogMessages([`Effect '${effect.label}' ended.`]);
+    }
+  }
+
   nextTurn(notes) {
     if (!this.state.started) return;
     this.saveHistory();
@@ -156,6 +189,7 @@ class TurnTracker {
     this.state.currentTurn++;
     this.state.turnsSinceRest++;
     this.state.messages = []; 
+    
     this.processTurnConsumption();
     this.checkWanderingMonster(false);
   }
@@ -174,19 +208,31 @@ class TurnTracker {
   }
 
   processTurnConsumption() {
-    const expiredIds = [];
-    
+    // Process Lights
+    const expiredLightIds = [];
     this.state.activeLights.forEach(light => {
       light.turnsRemaining--;
       if (light.turnsRemaining === 0) {
         this.addLogMessages([`WARNING: ${light.label}'s ${light.type} is flickering and will soon burn out!`]);
       } else if (light.turnsRemaining === -1) {
         this.addLogMessages([`The ${light.type} held by ${light.label} burns out!`]);
-        expiredIds.push(light.id);
+        expiredLightIds.push(light.id);
       }
     });
+    this.state.activeLights = this.state.activeLights.filter(l => !expiredLightIds.includes(l.id));
 
-    this.state.activeLights = this.state.activeLights.filter(l => !expiredIds.includes(l.id));
+    // Process Effects
+    const expiredEffectIds = [];
+    this.state.activeEffects.forEach(effect => {
+      effect.turnsRemaining--;
+      if (effect.turnsRemaining === 0) {
+        this.addLogMessages([`WARNING: The effect '${effect.label}' is ending soon!`]);
+      } else if (effect.turnsRemaining === -1) {
+        this.addLogMessages([`The effect '${effect.label}' has ended.`]);
+        expiredEffectIds.push(effect.id);
+      }
+    });
+    this.state.activeEffects = this.state.activeEffects.filter(e => !expiredEffectIds.includes(e.id));
 
     if (this.state.turnsSinceRest === 5) {
       this.addLogMessages(["WARNING: This is the 6th turn. The party must REST this turn or suffer a penalty."]);
