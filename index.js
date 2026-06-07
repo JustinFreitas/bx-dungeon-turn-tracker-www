@@ -62,7 +62,28 @@ const sanitizeName = (name) => {
   return name.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 30);
 };
 
-// API Endpoints - Changed all data-fetching to POST to keep the key in the request body
+// --- ROUTES ---
+
+// Public Player Route
+app.get('/player', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'player.html'));
+});
+
+// Public Status Endpoint (Sanitized)
+app.get('/player-status', (req, res) => {
+  const status = tracker.getStatus();
+  const publicStatus = {
+    started: status.started,
+    currentTurn: status.currentTurn,
+    turnsSinceRest: status.turnsSinceRest,
+    activeLights: status.activeLights,
+    penalty: status.penalty,
+    ambientLight: status.ambientLight,
+    movementRate: status.movementRate
+  };
+  res.json(publicStatus);
+});
+
 app.post('/status', checkAuth, (req, res) => {
   res.json(tracker.getStatus());
 });
@@ -75,12 +96,10 @@ app.post('/save', checkAuth, (req, res) => {
   const { name } = req.body;
   const cleanName = sanitizeName(name);
   if (!cleanName) return res.status(400).json({ error: 'Valid name is required' });
-  
   const saves = getSaves();
   if (Object.keys(saves).length >= MAX_SAVES && !saves[cleanName]) {
     return res.status(400).json({ error: 'Save limit reached' });
   }
-  
   saves[cleanName] = tracker.toJSON();
   saveSaves(saves);
   res.json({ success: true });

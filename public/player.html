@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B/X Dungeon Turn Tracker - Player View</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; background-color: var(--bs-body-bg); color: var(--bs-body-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: background-color 0.3s, color 0.3s; }
+        .status-card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .visibility-warning { background-color: rgba(220, 53, 69, 0.15); border: 1px solid #dc3545; }
+        .light-item { font-size: 1.1rem; border-bottom: 1px solid var(--bs-border-color); padding: 8px 0; }
+        .light-item:last-child { border-bottom: none; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 3000; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-3 text-muted">Waiting for Dungeon Master to start session...</p>
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <h1 class="text-center mb-5">Dungeon Exploration Status</h1>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-lg-5">
+                <div class="card status-card p-2" id="statusCard">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        Current Session State
+                        <div id="visibilityBadge"></div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4 text-center border-bottom pb-3">
+                            <div class="text-muted small text-uppercase fw-bold">Current Turn</div>
+                            <div id="currentTurn" class="display-1 fw-bold">1</div>
+                            <div id="realTimeDisplay" class="text-info fw-bold">0min completed</div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="p-3 border rounded text-center h-100">
+                                    <div class="text-muted small text-uppercase fw-bold mb-1">Room Light</div>
+                                    <div id="ambientStatus" class="fs-4 fw-bold"></div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 border rounded text-center h-100">
+                                    <div class="text-muted small text-uppercase fw-bold mb-1">Move Rate</div>
+                                    <div id="movementRate" class="fs-4 fw-bold">Unset</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 border rounded text-center h-100">
+                                    <div class="text-muted small text-uppercase fw-bold mb-1">Rest Meter</div>
+                                    <div id="restStatus" class="fs-4 fw-bold">0 / 5</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 border rounded text-center h-100" id="penaltyBox">
+                                    <div class="text-muted small text-uppercase fw-bold mb-1">Penalty</div>
+                                    <div id="penalty" class="fs-4 fw-bold">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 border-top pt-3">
+                            <h5 class="fw-bold mb-3">Active Light Sources</h5>
+                            <div id="activeLightsList">
+                                <!-- Lights list -->
+                            </div>
+                            <div class="small text-muted mt-2 italic" style="font-size: 0.75rem;">(Turns remaining after this one)</div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-center text-muted small">Auto-refreshing every 5 seconds.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatTime(turn) {
+            const minutesTotal = (turn - 1) * 10;
+            const hours = Math.floor(minutesTotal / 60);
+            const minutes = minutesTotal % 60;
+            let timeStr = "";
+            if (hours > 0) timeStr += hours + "hr ";
+            timeStr += minutes + "min completed";
+            return timeStr;
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/player-status');
+                const status = await response.json();
+
+                if (!status.started) {
+                    document.getElementById('loadingOverlay').style.display = 'flex';
+                    return;
+                }
+                document.getElementById('loadingOverlay').style.display = 'none';
+
+                // Core Stats
+                document.getElementById('currentTurn').innerText = status.currentTurn;
+                document.getElementById('realTimeDisplay').innerText = formatTime(status.currentTurn);
+                document.getElementById('movementRate').innerText = status.movementRate || 'Unset';
+                document.getElementById('restStatus').innerText = `${status.turnsSinceRest} / 5`;
+                
+                const penaltyVal = status.penalty || 0;
+                document.getElementById('penalty').innerText = penaltyVal;
+                document.getElementById('penaltyBox').className = penaltyVal < 0 
+                    ? 'p-3 border border-danger rounded text-center h-100 bg-danger-subtle text-danger' 
+                    : 'p-3 border rounded text-center h-100';
+
+                // Ambient Light
+                const ambientStatus = document.getElementById('ambientStatus');
+                if (status.ambientLight === 'lit') {
+                    ambientStatus.innerHTML = '☀️ <span class="text-warning">LIT</span>';
+                } else {
+                    ambientStatus.innerHTML = '🌙 <span class="text-secondary">DARK</span>';
+                }
+
+                // Active Lights
+                const lightsList = document.getElementById('activeLightsList');
+                lightsList.innerHTML = '';
+                if (status.activeLights.length === 0) {
+                    lightsList.innerHTML = '<div class="text-muted italic">All sources extinguished.</div>';
+                } else {
+                    status.activeLights.forEach(l => {
+                        const div = document.createElement('div');
+                        div.className = 'light-item d-flex justify-content-between align-items-center';
+                        div.innerHTML = `<span><strong>${l.label}</strong>'s ${l.type}</span> <span class="badge bg-warning text-dark">+${l.turnsRemaining} turns</span>`;
+                        lightsList.appendChild(div);
+                    });
+                }
+
+                // Visibility Logic
+                const statusCard = document.getElementById('statusCard');
+                const visibilityBadge = document.getElementById('visibilityBadge');
+
+                if (status.ambientLight === 'lit') {
+                    statusCard.classList.remove('visibility-warning');
+                    visibilityBadge.innerHTML = '';
+                } else {
+                    if (status.activeLights.length === 0) {
+                        statusCard.classList.add('visibility-warning');
+                        visibilityBadge.innerHTML = '<span class="badge bg-danger">NO VISIBILITY</span>';
+                    } else {
+                        statusCard.classList.remove('visibility-warning');
+                        visibilityBadge.innerHTML = '<span class="badge bg-warning text-dark">LIGHT ACTIVE</span>';
+                    }
+                }
+
+            } catch (err) {
+                console.error("Fetch failed:", err);
+            }
+        }
+
+        // Initial load and polling
+        updateStatus();
+        setInterval(updateStatus, 5000);
+    </script>
+</body>
+</html>
