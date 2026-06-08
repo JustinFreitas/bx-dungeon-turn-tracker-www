@@ -84,6 +84,13 @@
     </div>
 
     <script>
+        // Escape user-supplied text before injecting into innerHTML to prevent stored XSS.
+        function esc(str) {
+            return String(str ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
         function formatTime(turn) {
             const minutesTotal = (turn - 1) * 10;
             const hours = Math.floor(minutesTotal / 60);
@@ -132,7 +139,7 @@
                     status.activeLights.forEach(l => {
                         const div = document.createElement('div');
                         div.className = 'light-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `<span><strong>${l.label}</strong>'s ${l.type}</span> <span class="badge bg-warning text-dark">+${l.turnsRemaining} turns</span>`;
+                        div.innerHTML = `<span><strong>${esc(l.label)}</strong>'s ${esc(l.type)}</span> <span class="badge bg-warning text-dark">+${l.turnsRemaining} turns</span>`;
                         lightsList.appendChild(div);
                     });
                 }
@@ -144,7 +151,7 @@
                     status.activeEffects.forEach(e => {
                         const div = document.createElement('div');
                         div.className = 'light-item d-flex justify-content-between align-items-center';
-                        div.innerHTML = `<span><strong>${e.label}</strong> (Effect)</span> <span class="badge bg-info text-dark">+${e.turnsRemaining} turns</span>`;
+                        div.innerHTML = `<span><strong>${esc(e.label)}</strong> (Effect)</span> <span class="badge bg-info text-dark">+${e.turnsRemaining} turns</span>`;
                         effectsList.appendChild(div);
                     });
                 }

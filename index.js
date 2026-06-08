@@ -2,6 +2,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const hpp = require('hpp');
@@ -13,6 +16,11 @@ const port = process.env.PORT || 3000;
 const SAVES_FILE = path.join(__dirname, 'saves.json');
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dungeon-master';
 const MAX_SAVES = 50;
+
+const sslOptions = {
+  key: process.env.SSL_KEY && fs.existsSync(process.env.SSL_KEY) ? fs.readFileSync(process.env.SSL_KEY) : null,
+  cert: process.env.SSL_CERT && fs.existsSync(process.env.SSL_CERT) ? fs.readFileSync(process.env.SSL_CERT) : null,
+};
 
 let tracker = new TurnTracker();
 
@@ -34,14 +42,19 @@ app.use(xss());
 app.use(bodyParser.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Security: Rate Limiting
-const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
-const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+// Security: Rate Limiting.
+// generalLimiter covers high-frequency gameplay (turns, lights, undo); sensitiveLimiter
+// is stricter for save/load/delete; playerLimiter is generous for the 5s read-only poll.
+const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500 });
+const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50 });
+const playerLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 
-// Global Key Middleware
+// Global Key Middleware (timing-safe comparison to avoid leaking the key length/prefix).
 const checkAuth = (req, res, next) => {
-  const key = req.body.key;
-  if (key !== ADMIN_KEY) {
+  const key = typeof req.body.key === 'string' ? req.body.key : '';
+  const a = Buffer.from(key);
+  const b = Buffer.from(ADMIN_KEY);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ error: 'Unauthorized: Valid Admin Key Required' });
   }
   next();
@@ -54,7 +67,10 @@ const getSaves = () => {
 };
 
 const saveSaves = (saves) => {
-  fs.writeFileSync(SAVES_FILE, JSON.stringify(saves, null, 2), 'utf8');
+  // Write to a temp file then rename so a crash mid-write can't corrupt saves.json.
+  const tmp = `${SAVES_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(saves, null, 2), 'utf8');
+  fs.renameSync(tmp, SAVES_FILE);
 };
 
 const sanitizeName = (name) => {
@@ -70,7 +86,7 @@ app.get('/player', (req, res) => {
 });
 
 // Public Status Endpoint (Sanitized)
-app.get('/player-status', (req, res) => {
+app.get('/player-status', playerLimiter, (req, res) => {
   const status = tracker.getStatus();
   const publicStatus = {
     started: status.started,
@@ -85,15 +101,15 @@ app.get('/player-status', (req, res) => {
   res.json(publicStatus);
 });
 
-app.post('/status', checkAuth, (req, res) => {
+app.post('/status', generalLimiter, checkAuth, (req, res) => {
   res.json(tracker.getStatus());
 });
 
-app.post('/saves', checkAuth, (req, res) => {
+app.post('/saves', generalLimiter, checkAuth, (req, res) => {
   res.json(Object.keys(getSaves()));
 });
 
-app.post('/save', checkAuth, (req, res) => {
+app.post('/save', sensitiveLimiter, checkAuth, (req, res) => {
   const { name } = req.body;
   const cleanName = sanitizeName(name);
   if (!cleanName) return res.status(400).json({ error: 'Valid name is required' });
@@ -106,7 +122,7 @@ app.post('/save', checkAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/peek', checkAuth, (req, res) => {
+app.post('/peek', sensitiveLimiter, checkAuth, (req, res) => {
   const { name } = req.body;
   const cleanName = sanitizeName(name);
   const saves = getSaves();
@@ -114,7 +130,7 @@ app.post('/peek', checkAuth, (req, res) => {
   res.json({ success: true, data: saves[cleanName] });
 });
 
-app.post('/delete', checkAuth, (req, res) => {
+app.post('/delete', sensitiveLimiter, checkAuth, (req, res) => {
   const { name } = req.body;
   const cleanName = sanitizeName(name);
   const saves = getSaves();
@@ -124,7 +140,7 @@ app.post('/delete', checkAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/load', checkAuth, (req, res) => {
+app.post('/load', sensitiveLimiter, checkAuth, (req, res) => {
   const { name } = req.body;
   const cleanName = sanitizeName(name);
   const saves = getSaves();
@@ -133,7 +149,7 @@ app.post('/load', checkAuth, (req, res) => {
   res.json({ success: true, status: tracker.getStatus() });
 });
 
-app.post('/action', checkAuth, (req, res) => {
+app.post('/action', generalLimiter, checkAuth, (req, res) => {
   const { action, value, label, initialLights, ambientLight, movementRate, duration } = req.body;
   
   const actionLower = action ? action.toLowerCase().trim() : '';
@@ -170,6 +186,9 @@ app.post('/action', checkAuth, (req, res) => {
     case 'setmovementrate':
       tracker.setMovementRate(value);
       break;
+    case 'setmonsterinterval':
+      tracker.setMonsterInterval(value);
+      break;
     case 'undo':
       tracker.undo();
       break;
@@ -190,7 +209,23 @@ app.post('/action', checkAuth, (req, res) => {
   res.json({ success: true, status: tracker.getStatus() });
 });
 
-app.listen(port, () => {
-  console.log(`B/X D&D Turn Tracker listening at http://localhost:${port}`);
-  console.log(`Admin key is: ${ADMIN_KEY}`);
-});
+const warnOnStartup = (secure) => {
+  if (ADMIN_KEY === 'dungeon-master') {
+    console.warn('WARNING: Using the default admin key. Set the ADMIN_KEY environment variable before exposing this server.');
+  }
+  if (!secure) {
+    console.warn('WARNING: Running over plain HTTP. The admin key is sent in cleartext; configure SSL_KEY/SSL_CERT for anything beyond localhost.');
+  }
+};
+
+if (sslOptions.key && sslOptions.cert) {
+  https.createServer(sslOptions, app).listen(port, () => {
+    console.log(`B/X D&D Turn Tracker listening at https://localhost:${port}`);
+    warnOnStartup(true);
+  });
+} else {
+  app.listen(port, () => {
+    console.log(`B/X D&D Turn Tracker listening at http://localhost:${port}`);
+    warnOnStartup(false);
+  });
+}

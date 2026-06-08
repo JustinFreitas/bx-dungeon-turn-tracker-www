@@ -1,5 +1,5 @@
 {
-  "name": "osr-dungeon-turn-tracker-www",
+  "name": "bx-dungeon-turn-tracker-www",
   "version": "1.0.0",
   "description": "B/X D&D Dungeon Turn Tracker",
   "main": "index.js",

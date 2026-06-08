@@ -108,6 +108,18 @@ class TurnTracker {
     this.addLogMessages([`Party movement rate set to ${rate}.`]);
   }
 
+  setMonsterInterval(interval) {
+    const parsed = parseInt(interval);
+    if (isNaN(parsed) || parsed < 0) return;
+    this.saveHistory();
+    this.state.monsterInterval = parsed;
+    this.addLogMessages([
+      parsed > 0
+        ? `Monster check frequency changed: every ${parsed} turn(s).`
+        : "Monster checks disabled."
+    ]);
+  }
+
   toggleAmbientLight() {
     this.saveHistory();
     this.state.ambientLight = this.state.ambientLight === 'dark' ? 'lit' : 'dark';
@@ -141,7 +153,8 @@ class TurnTracker {
   }
 
   extinguishLight(id) {
-    const index = this.state.activeLights.findIndex(l => l.id === id);
+    // IDs are generated as numbers but arrive from the client as strings; compare loosely.
+    const index = this.state.activeLights.findIndex(l => String(l.id) === String(id));
     if (index !== -1) {
       this.saveHistory();
       const light = this.state.activeLights[index];
@@ -173,7 +186,8 @@ class TurnTracker {
   }
 
   removeEffect(id) {
-    const index = this.state.activeEffects.findIndex(e => e.id === id);
+    // IDs are generated as numbers but arrive from the client as strings; compare loosely.
+    const index = this.state.activeEffects.findIndex(e => String(e.id) === String(id));
     if (index !== -1) {
       this.saveHistory();
       const effect = this.state.activeEffects[index];
