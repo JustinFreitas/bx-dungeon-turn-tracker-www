@@ -281,6 +281,22 @@
             }[c]));
         }
 
+        // Build a resource row with a remove button wired via a listener (not an
+        // interpolated inline handler), so labels/ids can't break out of an attribute.
+        function resourceRow(labelHtml, onRemove) {
+            const div = document.createElement('div');
+            div.className = 'light-item d-flex justify-content-between align-items-center';
+            const span = document.createElement('span');
+            span.innerHTML = labelHtml;
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-outline-danger btn-xs py-0';
+            btn.innerHTML = '&times;';
+            btn.addEventListener('click', onRemove);
+            div.appendChild(span);
+            div.appendChild(btn);
+            return div;
+        }
+
         function handleAuth() {
             sessionKey = document.getElementById('globalAuthKey').value.trim();
             if (!sessionKey) return;
@@ -394,11 +410,9 @@
                 lightsList.innerHTML = '<span class="text-muted small italic">All extinguished</span>';
             } else {
                 status.activeLights.forEach(l => {
-                    const div = document.createElement('div');
-                    div.className = 'light-item d-flex justify-content-between align-items-center';
-                    div.innerHTML = `<span><strong>${esc(l.label)}</strong>: +${l.turnsRemaining} turns</span>
-                        <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('extinguish', '${esc(l.id)}')">&times;</button>`;
-                    lightsList.appendChild(div);
+                    lightsList.appendChild(
+                        resourceRow(`<strong>${esc(l.label)}</strong>: +${l.turnsRemaining} turns`,
+                            () => handleAction('extinguish', l.id)));
                 });
             }
 
@@ -409,11 +423,9 @@
                 effectsList.innerHTML = '<span class="text-muted small italic">None active</span>';
             } else {
                 status.activeEffects.forEach(e => {
-                    const div = document.createElement('div');
-                    div.className = 'light-item d-flex justify-content-between align-items-center';
-                    div.innerHTML = `<span><strong>${esc(e.label)}</strong>: +${e.turnsRemaining} turns</span>
-                        <button class="btn btn-outline-danger btn-xs py-0" onclick="handleAction('removeEffect', '${esc(e.id)}')">&times;</button>`;
-                    effectsList.appendChild(div);
+                    effectsList.appendChild(
+                        resourceRow(`<strong>${esc(e.label)}</strong>: +${e.turnsRemaining} turns`,
+                            () => handleAction('removeEffect', e.id)));
                 });
             }
 
@@ -541,12 +553,27 @@
                 names.forEach(name => {
                     const btnGrp = document.createElement('div');
                     btnGrp.className = 'list-group-item d-flex justify-content-between align-items-center small py-1';
-                    btnGrp.innerHTML = `<span class="text-truncate" style="max-width: 150px;">${esc(name)}</span>
-                        <div class="d-flex gap-1">
-                            <button class="btn btn-outline-info btn-xs" onclick="handlePeek('${name}')">Log</button>
-                            <button class="btn btn-outline-primary btn-xs" onclick="handleLoad('${name}')">Load</button>
-                            <button class="btn btn-outline-danger btn-xs" onclick="handleDelete('${name}')">&times;</button>
-                        </div>`;
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'text-truncate';
+                    nameSpan.style.maxWidth = '150px';
+                    nameSpan.textContent = name;
+
+                    const actions = document.createElement('div');
+                    actions.className = 'd-flex gap-1';
+                    const mkBtn = (text, cls, fn) => {
+                        const b = document.createElement('button');
+                        b.className = `btn ${cls} btn-xs`;
+                        b.textContent = text;
+                        b.addEventListener('click', () => fn(name));
+                        return b;
+                    };
+                    actions.appendChild(mkBtn('Log', 'btn-outline-info', handlePeek));
+                    actions.appendChild(mkBtn('Load', 'btn-outline-primary', handleLoad));
+                    actions.appendChild(mkBtn('×', 'btn-outline-danger', handleDelete));
+
+                    btnGrp.appendChild(nameSpan);
+                    btnGrp.appendChild(actions);
                     listDiv.appendChild(btnGrp);
                 });
             } catch (err) {}

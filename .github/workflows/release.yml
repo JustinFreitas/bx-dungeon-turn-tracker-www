@@ -28,7 +28,7 @@ jobs:
       - name: Build clean bundle
         run: |
           mkdir release
-          cp -r public src index.js ecosystem.config.js package.json package-lock.json release/
+          cp -r public src index.js ecosystem.config.example.js package.json package-lock.json release/
           tar -czvf bx-turn-tracker.tar.gz -C release .
 
       - name: Create GitHub Release

@@ -33,7 +33,9 @@ class TurnTracker {
   
   fromJSON(data) {
     if (!data || !data.state) return;
-    this.state = data.state;
+    // Merge over a fresh state so saves written before a field existed
+    // (e.g. activeEffects) still load with sane defaults instead of undefined.
+    this.state = { ...this.getInitialState(), ...data.state };
     this.history = data.history || [];
     this.redoStack = data.redoStack || [];
   }

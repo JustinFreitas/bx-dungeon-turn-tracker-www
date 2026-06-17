@@ -18,6 +18,18 @@ describe('TurnTracker Serialization', () => {
     expect(newTracker.history.length).toBe(3);
   });
 
+  test('fromJSON backfills fields missing from older saves', () => {
+    // A save written before activeEffects existed: advancing a turn must not throw.
+    const legacyState = new TurnTracker(() => 6).getInitialState();
+    legacyState.started = true;
+    delete legacyState.activeEffects;
+
+    const tracker = new TurnTracker(() => 6);
+    tracker.fromJSON({ state: legacyState });
+    expect(tracker.state.activeEffects).toEqual([]);
+    expect(() => tracker.nextTurn()).not.toThrow();
+  });
+
   test('fromJSON should handle empty/missing data gracefully', () => {
     const tracker = new TurnTracker();
     const initialState = JSON.parse(JSON.stringify(tracker.state));

@@ -1,19 +1,16 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const https = require('https');
-const http = require('http');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const hpp = require('hpp');
-const xss = require('xss-clean');
 const TurnTracker = require('./src/tracker');
 
 const app = express();
 const port = process.env.PORT || 3000;
-const SAVES_FILE = path.join(__dirname, 'saves.json');
+const SAVES_FILE = process.env.SAVES_FILE || path.join(__dirname, 'saves.json');
 const ADMIN_KEY = process.env.ADMIN_KEY || 'dungeon-master';
 const MAX_SAVES = 50;
 
@@ -38,8 +35,7 @@ app.use(helmet({
   },
 }));
 app.use(hpp());
-app.use(xss());
-app.use(bodyParser.json({ limit: '50kb' }));
+app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Security: Rate Limiting.
@@ -218,14 +214,20 @@ const warnOnStartup = (secure) => {
   }
 };
 
-if (sslOptions.key && sslOptions.cert) {
-  https.createServer(sslOptions, app).listen(port, () => {
-    console.log(`B/X D&D Turn Tracker listening at https://localhost:${port}`);
-    warnOnStartup(true);
-  });
-} else {
-  app.listen(port, () => {
-    console.log(`B/X D&D Turn Tracker listening at http://localhost:${port}`);
-    warnOnStartup(false);
-  });
+// Only bind a port when run directly (`node index.js`); when required by tests
+// we just export the configured app.
+if (require.main === module) {
+  if (sslOptions.key && sslOptions.cert) {
+    https.createServer(sslOptions, app).listen(port, () => {
+      console.log(`B/X D&D Turn Tracker listening at https://localhost:${port}`);
+      warnOnStartup(true);
+    });
+  } else {
+    app.listen(port, () => {
+      console.log(`B/X D&D Turn Tracker listening at http://localhost:${port}`);
+      warnOnStartup(false);
+    });
+  }
 }
+
+module.exports = app;
