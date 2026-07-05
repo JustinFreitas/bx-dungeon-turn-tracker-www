@@ -48,9 +48,9 @@ const playerLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 // Global Key Middleware (timing-safe comparison to avoid leaking the key length/prefix).
 const checkAuth = (req, res, next) => {
   const key = typeof req.body.key === 'string' ? req.body.key : '';
-  const a = Buffer.from(key);
-  const b = Buffer.from(ADMIN_KEY);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  const aHash = crypto.createHash('sha256').update(key).digest();
+  const bHash = crypto.createHash('sha256').update(ADMIN_KEY).digest();
+  if (!crypto.timingSafeEqual(aHash, bHash)) {
     return res.status(401).json({ error: 'Unauthorized: Valid Admin Key Required' });
   }
   next();
@@ -58,8 +58,15 @@ const checkAuth = (req, res, next) => {
 
 // Persistence Helpers
 const getSaves = () => {
-  if (!fs.existsSync(SAVES_FILE)) return {};
-  try { return JSON.parse(fs.readFileSync(SAVES_FILE, 'utf8')); } catch (e) { return {}; }
+  if (!fs.existsSync(SAVES_FILE)) return Object.create(null);
+  try {
+    const data = JSON.parse(fs.readFileSync(SAVES_FILE, 'utf8'));
+    const cleanMap = Object.create(null);
+    Object.assign(cleanMap, data);
+    return cleanMap;
+  } catch (e) {
+    return Object.create(null);
+  }
 };
 
 const saveSaves = (saves) => {
@@ -213,6 +220,11 @@ const warnOnStartup = (secure) => {
     console.warn('WARNING: Running over plain HTTP. The admin key is sent in cleartext; configure SSL_KEY/SSL_CERT for anything beyond localhost.');
   }
 };
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled request error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
 
 // Only bind a port when run directly (`node index.js`); when required by tests
 // we just export the configured app.

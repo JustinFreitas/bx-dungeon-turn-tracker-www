@@ -1,3 +1,10 @@
+const crypto = require('crypto');
+
+const TORCH_DURATION = 6;
+const LANTERN_DURATION = 24;
+const REST_WARNING_TURN = 5;
+const REST_EXHAUSTION_TURN = 6;
+
 /**
  * TurnTracker Class
  * Manages the state, history, and rules for a B/X D&D Dungeon Turn Tracker.
@@ -134,8 +141,8 @@ class TurnTracker {
   activateLight(type, label = "Party", shouldSave = true) {
     if (shouldSave) this.saveHistory();
     
-    const maxTurns = type === 'lantern' ? 24 : 6;
-    const cleanLabel = label.trim() || "Party";
+    const maxTurns = type === 'lantern' ? LANTERN_DURATION : TORCH_DURATION;
+    const cleanLabel = (typeof label === 'string' ? label : "Party").trim() || "Party";
     
     const existing = this.state.activeLights.find(l => l.label === cleanLabel && l.type === type);
     
@@ -144,7 +151,7 @@ class TurnTracker {
         this.addLogMessages([`${cleanLabel}'s ${type} refreshed. It will last for ${maxTurns} turns starting NEXT turn.`]);
     } else {
         const newLight = {
-            id: Date.now() + Math.random(),
+            id: crypto.randomUUID(),
             label: cleanLabel,
             type: type,
             turnsRemaining: maxTurns - 1
@@ -167,10 +174,11 @@ class TurnTracker {
 
   addEffect(label, turns) {
     const turnsInt = parseInt(turns);
-    if (!label || isNaN(turnsInt) || turnsInt <= 0) return;
+    if (typeof label !== 'string' || isNaN(turnsInt) || turnsInt <= 0) return;
 
     this.saveHistory();
     const cleanLabel = label.trim();
+    if (!cleanLabel) return;
     
     const existing = this.state.activeEffects.find(e => e.label === cleanLabel);
     if (existing) {
@@ -178,7 +186,7 @@ class TurnTracker {
         this.addLogMessages([`Effect '${cleanLabel}' refreshed. It will last for ${turnsInt} turns starting NEXT turn.`]);
     } else {
         const newEffect = {
-            id: Date.now() + Math.random(),
+            id: crypto.randomUUID(),
             label: cleanLabel,
             turnsRemaining: turnsInt - 1
         };
@@ -250,9 +258,9 @@ class TurnTracker {
     });
     this.state.activeEffects = this.state.activeEffects.filter(e => !expiredEffectIds.includes(e.id));
 
-    if (this.state.turnsSinceRest === 5) {
+    if (this.state.turnsSinceRest === REST_WARNING_TURN) {
       this.addLogMessages(["WARNING: This is the 6th turn. The party must REST this turn or suffer a penalty."]);
-    } else if (this.state.turnsSinceRest >= 6) {
+    } else if (this.state.turnsSinceRest >= REST_EXHAUSTION_TURN) {
       this.state.penalty = -1;
       this.addLogMessages(["The party did not rest! They are exhausted: -1 penalty to all rolls until rested."]);
     }

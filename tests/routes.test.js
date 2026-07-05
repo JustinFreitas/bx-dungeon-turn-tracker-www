@@ -96,6 +96,19 @@ describe('save / load', () => {
     const res = await request(app).post('/load').send({ key: KEY, name: 'does-not-exist' });
     expect(res.status).toBe(404);
   });
+
+  test('handles prototype property names (e.g. toString) without pollution or failure', async () => {
+    await reset();
+    const saveRes = await request(app).post('/save').send({ key: KEY, name: 'toString' });
+    expect(saveRes.body.success).toBe(true);
+
+    const peekRes = await request(app).post('/peek').send({ key: KEY, name: 'toString' });
+    expect(peekRes.status).toBe(200);
+    expect(peekRes.body.data).toHaveProperty('state');
+
+    const loadRes = await request(app).post('/load').send({ key: KEY, name: 'toString' });
+    expect(loadRes.status).toBe(200);
+  });
 });
 
 describe('/player-status', () => {

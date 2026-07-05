@@ -57,4 +57,16 @@ describe('TurnTracker Edge Cases', () => {
     tracker.setMonsterInterval(0); // 0 is valid (disabled)
     expect(tracker.getStatus().monsterInterval).toBe(0);
   });
+
+  test('activateLight and addEffect handle non-string and null labels gracefully', () => {
+    const tracker = new TurnTracker(() => 6);
+    tracker.start();
+
+    // Verify it doesn't throw when passing null, object, or undefined labels
+    expect(() => tracker.activateLight('torch', null)).not.toThrow();
+    expect(() => tracker.activateLight('torch', {})).not.toThrow();
+    
+    expect(() => tracker.addEffect(null, 6)).not.toThrow();
+    expect(() => tracker.addEffect({}, 6)).not.toThrow();
+  });
 });
