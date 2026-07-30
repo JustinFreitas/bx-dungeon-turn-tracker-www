@@ -79,9 +79,9 @@ class TurnTracker {
       this.state.fullLog.push(entry);
     }
     msgs.forEach(msg => {
-      if (!entry.messages.includes(msg)) entry.messages.push(msg);
+      entry.messages.push(msg);
       if (!this.state.messages) this.state.messages = [];
-      if (!this.state.messages.includes(msg)) this.state.messages.push(msg);
+      this.state.messages.push(msg);
     });
   }
 

@@ -69,4 +69,27 @@ describe('TurnTracker Edge Cases', () => {
     expect(() => tracker.addEffect(null, 6)).not.toThrow();
     expect(() => tracker.addEffect({}, 6)).not.toThrow();
   });
+
+  test('allows duplicate manual rolls and identical light source activation logs', () => {
+    const tracker = new TurnTracker(() => 4);
+    tracker.start();
+
+    // Perform two manual rolls with the same result
+    tracker.manualMonsterCheck();
+    tracker.manualMonsterCheck();
+
+    // Activate two torches with different labels on the same turn
+    tracker.activateLight('torch', 'Grog');
+    tracker.activateLight('torch', 'Bork');
+
+    const logMessages = tracker.state.fullLog[0].messages;
+    
+    // Check manual rolls duplicate messages are kept
+    const manualRollLogs = logMessages.filter(m => m.includes("Manual Wandering Monster Check: Rolled 4"));
+    expect(manualRollLogs.length).toBe(2);
+
+    // Check torch activations are both kept
+    expect(logMessages).toContain("Grog lit a torch. It will last for 6 turns.");
+    expect(logMessages).toContain("Bork lit a torch. It will last for 6 turns.");
+  });
 });
