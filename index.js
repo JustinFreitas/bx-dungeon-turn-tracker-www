@@ -47,7 +47,7 @@ const playerLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 
 // Global Key Middleware (timing-safe comparison to avoid leaking the key length/prefix).
 const checkAuth = (req, res, next) => {
-  const key = typeof req.body.key === 'string' ? req.body.key : '';
+  const key = req.body && typeof req.body.key === 'string' ? req.body.key : '';
   const aHash = crypto.createHash('sha256').update(key).digest();
   const bHash = crypto.createHash('sha256').update(ADMIN_KEY).digest();
   if (!crypto.timingSafeEqual(aHash, bHash)) {
@@ -57,10 +57,10 @@ const checkAuth = (req, res, next) => {
 };
 
 // Persistence Helpers
-const getSaves = () => {
-  if (!fs.existsSync(SAVES_FILE)) return Object.create(null);
+const getSaves = async () => {
   try {
-    const data = JSON.parse(fs.readFileSync(SAVES_FILE, 'utf8'));
+    await fs.promises.access(SAVES_FILE);
+    const data = JSON.parse(await fs.promises.readFile(SAVES_FILE, 'utf8'));
     const cleanMap = Object.create(null);
     Object.assign(cleanMap, data);
     return cleanMap;
@@ -69,11 +69,11 @@ const getSaves = () => {
   }
 };
 
-const saveSaves = (saves) => {
+const saveSaves = async (saves) => {
   // Write to a temp file then rename so a crash mid-write can't corrupt saves.json.
   const tmp = `${SAVES_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(saves, null, 2), 'utf8');
-  fs.renameSync(tmp, SAVES_FILE);
+  await fs.promises.writeFile(tmp, JSON.stringify(saves, null, 2), 'utf8');
+  await fs.promises.rename(tmp, SAVES_FILE);
 };
 
 const sanitizeName = (name) => {
@@ -108,48 +108,69 @@ app.post('/status', generalLimiter, checkAuth, (req, res) => {
   res.json(tracker.getStatus());
 });
 
-app.post('/saves', generalLimiter, checkAuth, (req, res) => {
-  res.json(Object.keys(getSaves()));
-});
-
-app.post('/save', sensitiveLimiter, checkAuth, (req, res) => {
-  const { name } = req.body;
-  const cleanName = sanitizeName(name);
-  if (!cleanName) return res.status(400).json({ error: 'Valid name is required' });
-  const saves = getSaves();
-  if (Object.keys(saves).length >= MAX_SAVES && !saves[cleanName]) {
-    return res.status(400).json({ error: 'Save limit reached' });
+app.post('/saves', generalLimiter, checkAuth, async (req, res, next) => {
+  try {
+    const saves = await getSaves();
+    res.json(Object.keys(saves));
+  } catch (err) {
+    next(err);
   }
-  saves[cleanName] = tracker.toJSON();
-  saveSaves(saves);
-  res.json({ success: true });
 });
 
-app.post('/peek', sensitiveLimiter, checkAuth, (req, res) => {
-  const { name } = req.body;
-  const cleanName = sanitizeName(name);
-  const saves = getSaves();
-  if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
-  res.json({ success: true, data: saves[cleanName] });
+app.post('/save', sensitiveLimiter, checkAuth, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const cleanName = sanitizeName(name);
+    if (!cleanName) return res.status(400).json({ error: 'Valid name is required' });
+    const saves = await getSaves();
+    if (Object.keys(saves).length >= MAX_SAVES && !saves[cleanName]) {
+      return res.status(400).json({ error: 'Save limit reached' });
+    }
+    saves[cleanName] = tracker.toJSON();
+    await saveSaves(saves);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post('/delete', sensitiveLimiter, checkAuth, (req, res) => {
-  const { name } = req.body;
-  const cleanName = sanitizeName(name);
-  const saves = getSaves();
-  if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
-  delete saves[cleanName];
-  saveSaves(saves);
-  res.json({ success: true });
+app.post('/peek', sensitiveLimiter, checkAuth, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const cleanName = sanitizeName(name);
+    const saves = await getSaves();
+    if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
+    res.json({ success: true, data: saves[cleanName] });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post('/load', sensitiveLimiter, checkAuth, (req, res) => {
-  const { name } = req.body;
-  const cleanName = sanitizeName(name);
-  const saves = getSaves();
-  if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
-  tracker.fromJSON(saves[cleanName]);
-  res.json({ success: true, status: tracker.getStatus() });
+app.post('/delete', sensitiveLimiter, checkAuth, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const cleanName = sanitizeName(name);
+    const saves = await getSaves();
+    if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
+    delete saves[cleanName];
+    await saveSaves(saves);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/load', sensitiveLimiter, checkAuth, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const cleanName = sanitizeName(name);
+    const saves = await getSaves();
+    if (!saves[cleanName]) return res.status(404).json({ error: 'Save not found' });
+    tracker.fromJSON(saves[cleanName]);
+    res.json({ success: true, status: tracker.getStatus() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.post('/action', generalLimiter, checkAuth, (req, res) => {
