@@ -11,7 +11,17 @@ const TurnTracker = require('./src/tracker');
 const app = express();
 const port = process.env.PORT || 3000;
 const SAVES_FILE = process.env.SAVES_FILE || path.join(__dirname, 'saves.json');
-const ADMIN_KEY = process.env.ADMIN_KEY || 'dungeon-master';
+// No default. This used to fall back to 'dungeon-master', which meant running
+// the server without configuring anything produced a working admin key that was
+// public knowledge — and only a startup warning, easily lost in a log, said so.
+// Refusing to start is the only safe behaviour for a credential.
+const ADMIN_KEY = process.env.ADMIN_KEY;
+if (!ADMIN_KEY) {
+  console.error('FATAL: ADMIN_KEY is not set. Refusing to start without an admin key.');
+  console.error('Set it in .env (see .env.example) and launch via ecosystem.config.js, or export it directly.');
+  console.error("Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"");
+  process.exit(1);
+}
 const MAX_SAVES = 50;
 
 const sslOptions = {
@@ -234,9 +244,6 @@ app.post('/action', generalLimiter, checkAuth, (req, res) => {
 });
 
 const warnOnStartup = (secure) => {
-  if (ADMIN_KEY === 'dungeon-master') {
-    console.warn('WARNING: Using the default admin key. Set the ADMIN_KEY environment variable before exposing this server.');
-  }
   if (!secure) {
     console.warn('WARNING: Running over plain HTTP. The admin key is sent in cleartext; configure SSL_KEY/SSL_CERT for anything beyond localhost.');
   }
