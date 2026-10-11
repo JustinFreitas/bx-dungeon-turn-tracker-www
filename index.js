@@ -81,7 +81,7 @@ const getSaves = async () => {
 
 const saveSaves = async (saves) => {
   // Write to a temp file then rename so a crash mid-write can't corrupt saves.json.
-  const tmp = `${SAVES_FILE}.${process.pid}.tmp`;
+  const tmp = `${SAVES_FILE}.${crypto.randomUUID()}.tmp`;
   await fs.promises.writeFile(tmp, JSON.stringify(saves, null, 2), 'utf8');
   await fs.promises.rename(tmp, SAVES_FILE);
 };

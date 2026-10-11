@@ -48,15 +48,15 @@ class TurnTracker {
   }
 
   saveHistory() {
-    this.history.push(JSON.stringify(this.state));
+    this.history.push(structuredClone(this.state));
     if (this.redoStack.length > 0) this.redoStack = [];
     if (this.history.length > 50) this.history.shift();
   }
 
   undo() {
     if (this.history.length > 0) {
-      this.redoStack.push(JSON.stringify(this.state));
-      this.state = JSON.parse(this.history.pop());
+      this.redoStack.push(structuredClone(this.state));
+      this.state = this.history.pop();
       return true;
     }
     return false;
@@ -64,8 +64,8 @@ class TurnTracker {
 
   redo() {
     if (this.redoStack.length > 0) {
-      this.history.push(JSON.stringify(this.state));
-      this.state = JSON.parse(this.redoStack.pop());
+      this.history.push(structuredClone(this.state));
+      this.state = this.redoStack.pop();
       return true;
     }
     return false;
